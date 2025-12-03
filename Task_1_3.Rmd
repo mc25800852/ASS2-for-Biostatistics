@@ -1,0 +1,420 @@
+---
+title: "Biostatistics 1 - Assignment 1"
+author: "Group 3: William Fleury Dziuk, Galya Gadzhalova, Chen Ma, Afroditi-Iliana Zotou"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    number_sections: true
+  html_document:
+    df_print: paged
+editor_options:
+  markdown:
+    wrap: 72
+bibliography: references.bib
+---
+
+```{r}
+#install.packages("car")
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(comment = "", message = FALSE, warning = FALSE)
+library(tableone)
+library(knitr)
+
+
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+pacman::p_load(tidyverse,rms,haven,mgcv,epitools,logistf,nlpred,geepack,
+skimr,pROC,tableone,emmeans,glmtoolbox,CalibrationCurves,mice, dcurves)
+```
+
+# Preparing for analysis and cleaning the data {.unnumbered}
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+# read in the data
+data(wcgs)
+# create factors from var ditpat0 with levels B and A in stead of 0 and 1
+wcgs$dibpat0f<-factor(wcgs$dibpat0,levels=0:1,label=c("B","A"))
+# create categories for age
+wcgs$agegroup <- cut(wcgs$age0,breaks=c(39,45,55,60),include.lowest = T,right = FALSE)
+# binary variable for smoker or not
+wcgs$smoker <- ifelse(wcgs$ncigs0>0,1,0)
+wcgs$smokerf <- factor(wcgs$smoker,levels=c(0,1),labels=c("No","Yes"))
+# convert height from inches to cm
+wcgs$heightcm <- wcgs$height0*2.54
+wcgs$weightkg <- wcgs$weight0*0.45359237
+wcgs$bmi <- wcgs$weightkg / (wcgs$heightcm/100)^2
+wcgs$bmicat <- cut(wcgs$bmi,breaks=c(0,25,30,40),include.lowest = T,right = FALSE)
+wcgs$cholmmol <- wcgs$chol0/39
+wcgs$sbp10 <- wcgs$sbp0/10
+# Create categories of sbp (systolic blood pressure). Make sure to have the lowest and highe
+wcgs$sbpcat <- cut(wcgs$sbp0,breaks=c(0,140,240),include.lowest = T,right = FALSE)
+# For use when tabulating the data you can create labels
+wcgs$chd69f <- factor(wcgs $chd69,levels=c(0,1),labels=c("No","Yes"))
+wcgs$cholmmol <- ifelse(wcgs$cholmmol<15,wcgs$cholmmol,NA)
+```
+
+A new dataframe was created containing only the variables relevant for
+the analysis.
+
+```{r}
+d <- wcgs %>% select(id,agegroup,age0,cholmmol,sbp10,bmi,smokerf,arcus0,dibpat0f,chd69)
+```
+
+After that all complete cases were extracted from the cleaned dataset.
+
+```{r}
+# Complete cases of the cleaned data*
+dc <- d %>% drop_na()
+```
+
+# Task 1
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+vars <- c("id", "agegroup", "age0", "cholmmol", "sbp10", "bmi",
+          "smokerf", "arcus0", "dibpat0f", "chd69")
+
+
+# create table 1
+table1 <- CreateTableOne(vars = vars, data = dc)
+
+print(table1)
+
+```
+
+
+
+# Taks 2
+
+## What is the outcome we are interested in?
+
+We are interested in the outcome coronary heart disease
+
+## What are the known risk factors for our outcome of interest?
+
+The known factors that cause risk for the particular desease are
+ceparated into two groups (modifiable and non-modifiable)
+[@cdc_heart_disease_risk_factors].
+
+Modifiable risk factors are:
+
+-   smoking
+-   physical inactivity
+-   unhealthy diet
+-   high blood pressure
+-   unhealthy blood cholesterol levels
+
+Non-modifiable risk factors are:
+
+-   sex
+-   ethnicity
+-   age
+-   family history (genetics)
+
+## How many people are included?
+
+The data that is used for this analysis have 3139 observations.
+
+## What is the overall prevalence of the disease in our cohort?
+
+To find the overall prevalence or the percentage of people who have the
+disease, the mean of the binary outcome variable is calculated.
+
+```{r}
+mean(dc$chd69)
+```
+
+Meaning that the overall prevalence is 8%.
+
+# Task 3
+
+## Part 1
+
+
+Before building a predictive model, a correlation matrix was calculated to
+check for variables with strong correlation. The threshhold for strong correlation is 0.8.
+
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+numeric_vars <- dc %>% 
+  select(where(is.numeric))
+
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+round(cor_matrix, 2)
+
+```
+
+
+
+**Table 1: Correlation Matrix of Numeric Variables**
+
+|       | id   | age0 | cholmmol | sbp10 | bmi  | arcus0 | chd69 |
+|-------|------|------|----------|-------|------|--------|-------|
+| id      | 1.00 | -0.05 | 0.06 | -0.05 | 0.03 | -0.02 | 0.00 |
+| age0    | -0.05 | 1.00 | 0.09 | 0.17 | 0.03 | 0.19 | 0.12 |
+| cholmmol| 0.06 | 0.09 | 1.00 | 0.12 | 0.07 | 0.13 | 0.15 |
+| sbp10   | -0.05 | 0.17 | 0.12 | 1.00 | 0.29 | 0.03 | 0.13 |
+| bmi     | 0.03 | 0.03 | 0.07 | 0.29 | 1.00 | -0.03 | 0.06 |
+| arcus0  | -0.02 | 0.19 | 0.13 | 0.03 | -0.03 | 0.19 | 0.07 |
+| chd69   | 0.00 | 0.12 | 0.15 | 0.13 | 0.06 | 0.07 | 1.00 |
+
+
+The matrix shows that none of the variables exceed the threshold of 0.8,
+therefore there is no risk for multicollinearity in this dataset. 
+Meaning that it is not necessary to remove any of the variables at this stage 
+of the analysis, since every variable contributes uniquely.
+
+
+The next step was to fit the full logistic regression model, which included all available predictors in the cleaned dataset. This model was then compared to a reduced model obtained using backward stepwise selection, where predictors were removed based on their contribution to model fit. In our case the function only excluded one of the initial variables (agegroup). The result yelds that the step model had better performance compared to the original one. 
+This is concluded since AIC value is lower than in the full model. 
+This result is also conceptually reasonable since agegroup and age0 represent the same underlying information and including both in the model introduces redundancy. Moreover, age0 is more informative as a continuous variable and agegroup was appropriately removed by the stepwise algorithm.
+
+
+
+```{r}
+full_model <- glm(chd69 ~  age0 + cholmmol + sbp10 + bmi + smokerf +
+                    arcus0 + dibpat0f + agegroup,
+                  data = dc,
+                  family = binomial)
+
+
+step_model <- step(full_model, direction = "backward")
+
+#summary(step_model)
+
+
+
+
+```
+```{r, echo=FALSE}
+coef_table <- data.frame(
+  Variable = c("(Intercept)", "age0", "cholmmol", "sbp10", "bmi", 
+               "smokerfYes", "arcus0", "dibpat0fA"),
+  Estimate = c(-12.24944, 0.05725, 0.40142, 0.18205, 0.05928,
+               0.60023, 0.22038, 0.70145),
+  Std_Error = c(0.98648, 0.01226, 0.06004, 0.04156, 0.02659,
+                0.14191, 0.14340, 0.14510),
+  Z_value = c(-12.417, 4.669, 6.686, 4.380, 2.229,
+              4.230, 1.537, 4.834),
+  P_value = c("< 2e-16", "3.03e-06", "2.30e-11", "1.18e-05", "0.0258",
+              "2.34e-05", "0.1243", "1.34e-06")
+)
+
+kable(coef_table, digits = 4, caption = "Logistic Regression Coefficient Table")
+```
+
+
+
+
+
+In the step-model only one of the variables is not statistically significant.
+
+
+```{r, echo=FALSE}
+#AIC(full_model)
+#AIC(step_model)
+
+
+#BIC(full_model)
+#BIC(step_model)
+
+```
+
+**Table: Comparison of AIC and BIC Between Models**
+
+| Metric                | Value    |
+|-----------------------|----------|
+| AIC (Full Model)      | 1597.072 |
+| AIC (Stepwise Model)  | 1594.227 |
+| BIC (Full Model)      | 1657.589 |
+| BIC (Stepwise Model)  | 1642.640 |
+
+
+
+Furthermore, we compared the AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) values of the full model and the stepwise model. Both criteria favored the stepwise model, as it achieved lower AIC and BIC values than the full model. This indicates that the stepwise model provides a better balance between goodness of fit and model complexity.
+
+
+## Part 2
+
+
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+
+interaction_model <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    age0:cholmmol +
+    age0:sbp10 +
+    smokerf:cholmmol +
+    smokerf:sbp10,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_smookerf_sbp10 <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    smokerf:sbp10,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_smoker_cholmmol <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+  
+    smokerf:cholmmol,
+  data = dc,
+  family = binomial
+)
+
+
+
+interaction_model_age0_sbp <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    age0:sbp10,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_age0_cholmmol <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    age0:cholmmol,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_bmi_cholmmol <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    bmi:cholmmol,
+  data = dc,
+  family = binomial
+)
+
+AIC(step_model, interaction_model)
+BIC(step_model, interaction_model)
+
+AIC(step_model, interaction_model_age0_cholmmol)
+BIC(step_model, interaction_model_age0_cholmmol)
+
+AIC(step_model, interaction_model_age0_sbp)
+BIC(step_model, interaction_model_age0_sbp)
+
+AIC(step_model, interaction_model_smoker_cholmmol)
+BIC(step_model, interaction_model_smoker_cholmmol)
+
+AIC(step_model, interaction_model_smookerf_sbp10)
+BIC(step_model, interaction_model_smookerf_sbp10)
+
+AIC(step_model, interaction_model_bmi_cholmmol)
+BIC(step_model, interaction_model_bmi_cholmmol)
+
+
+summary(interaction_model)
+summary(interaction_model_age0_cholmmol)
+summary(interaction_model_age0_sbp)
+summary(interaction_model_smoker_cholmmol)
+summary(interaction_model_smookerf_sbp10)
+summary(interaction_model_bmi_cholmmol)
+
+interaction_model$aic
+interaction_model_age0_cholmmol$aic
+interaction_model_age0_sbp$aic
+interaction_model_bmi_cholmmol$aic
+interaction_model_smoker_cholmmol$aic
+interaction_model_smookerf_sbp10$aic
+
+```
+
+Several interaction terms were tested to assess whether the effect of one predictor on CHD depended on another predictor. The interactions were selected based on clinical reasoning and included age with cholesterol, age with systolic blood pressure, smoking with cholesterol, smoking with systolic blood pressure, and BMI with cholesterol.
+First, a model containing all interaction terms was fitted. Then, individual models were fitted in which each interaction term was added separately together with all main predictors. For each model, AIC values were compared with those from the stepwise-selected main-effects model, and the significance of the interaction term was evaluated.
+Across these models, most interaction terms did not improve model performance and were not statistically significant. Only the BMI with cholesterol interaction improved the model by lowering the AIC and showing statistical significance. This indicates that, while most predictors act independently in this dataset, the BMI with cholesterol interaction may slightly modify the effect of one predictor on CHD.
+
+
+
+
+
+```{r}
+
+aic_table <- data.frame(
+  Model = c("Interaction Model (bmi × cholmmol)", "Stepwise Model"),
+  AIC   = c(1588.306, 1594.227)
+)
+
+kable(
+  aic_table,
+  digits = 3,
+  caption = "Table: Comparison of AIC Between Interaction Model and Stepwise Model"
+)
+```
+
+
+
+```{r, echo=FALSE}
+coef_table_interaction <- data.frame(
+  Variable = c("(Intercept)", "age0", "cholmmol", "sbp10", "bmi",
+               "smokerfYes", "arcus0", "dibpat0fA", "cholmmol:bmi"),
+  Estimate = c(-21.28332, 0.05645, 1.87548, 0.18684, 0.41952,
+               0.59778, 0.21903, 0.72663, -0.05908),
+  Std_Error = c(3.30528, 0.01228, 0.51871, 0.04159, 0.12774,
+                0.14197, 0.14380, 0.14564, 0.02063),
+  Z_value = c(-6.439, 4.595, 3.616, 4.492, 3.284,
+              4.211, 1.523, 4.989, -2.864),
+  P_value = c("1.20e-10", "4.32e-06", "0.00030", "7.05e-06", "0.00102",
+              "2.55e-05", "0.12771", "6.07e-07", "0.00418")
+)
+
+kable(coef_table_interaction, digits = 4,
+      caption = " Logistic Regression Coefficients for the Model Including the BMI × Cholesterol Interaction")
+```
+
+In the Table 5 can be seen that the interaction is statistically significant.
+
+
+
+Furthermore, a likelihood ratio test was conducted to compare the stepwise-selected main‐effects model with the model that included the BMI × cholesterol interaction term.
+
+```{r lrt-test, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+anova(step_model, interaction_model_bmi_cholmmol, test = "LRT")
+```
+
+
+
+```{r, echo=FALSE}
+library(knitr)
+
+lrt_table <- data.frame(
+  Model = c("Stepwise Model (no interaction)", "Interaction Model (with bmi:cholmmol)"),
+  Residual_Df = c(3131, 3130),
+  Residual_Deviance = c(1578.2, 1570.3),
+  Df = c("", 1),
+  Deviance = c("", 7.9208),
+  P_value = c("", "0.004887")
+)
+
+kable(lrt_table, 
+      caption = "Likelihood Ratio Test Comparing Models With and Without the BMI × Cholesterol Interaction",
+      align = "c")
+
+```
+
+
+This result suggests that the effect of cholesterol on CHD risk depends on BMI,
+and that including the bmi × cholmmol interaction provides additional information.
+
+## Part 3
+
+```{r}
+dc$predicted_risk <- predict(interaction_model_bmi_cholmmol, newdata = dc, type = "response")
+
+kable(head(dc), digits=3)
+```
+
+
+
+
+# References
