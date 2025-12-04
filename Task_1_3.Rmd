@@ -1,5 +1,5 @@
 ---
-title: "Biostatistics 1 - Assignment 1"
+title: "Biostatistics 1 - Assignment 2"
 author: "Group 3: William Fleury Dziuk, Galya Gadzhalova, Chen Ma, Afroditi-Iliana Zotou"
 date: "`r Sys.Date()`"
 output:
@@ -14,7 +14,7 @@ bibliography: references.bib
 ---
 
 ```{r}
-#install.packages("car")
+
 ```
 
 
@@ -58,15 +58,25 @@ wcgs$cholmmol <- ifelse(wcgs$cholmmol<15,wcgs$cholmmol,NA)
 ```
 
 A new dataframe was created containing only the variables relevant for
-the analysis.
+the analysis. The variables included are:
 
-```{r}
+- id 
+- age0
+- cholmmol
+- sbp10
+- bmi
+- smokerf
+- arcus0
+- dibpat0f
+- agegroup
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
 d <- wcgs %>% select(id,agegroup,age0,cholmmol,sbp10,bmi,smokerf,arcus0,dibpat0f,chd69)
 ```
 
-After that all complete cases were extracted from the cleaned dataset.
+After that all complete cases were extracted from the cleaned dataset. 
 
-```{r}
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
 # Complete cases of the cleaned data*
 dc <- d %>% drop_na()
 ```
@@ -167,6 +177,7 @@ therefore there is no risk for multicollinearity in this dataset.
 Meaning that it is not necessary to remove any of the variables at this stage 
 of the analysis, since every variable contributes uniquely.
 
+A logistic regression model was selected for this analysis because the outcome variable is binary and diagnostic checks indicated no evidence of multicollinearity among the predictors.
 
 The next step was to fit the full logistic regression model, which included all available predictors in the cleaned dataset. This model was then compared to a reduced model obtained using backward stepwise selection, where predictors were removed based on their contribution to model fit. In our case the function only excluded one of the initial variables (agegroup). The result yelds that the step model had better performance compared to the original one. 
 This is concluded since AIC value is lower than in the full model. 
@@ -174,7 +185,7 @@ This result is also conceptually reasonable since agegroup and age0 represent th
 
 
 
-```{r}
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
 full_model <- glm(chd69 ~  age0 + cholmmol + sbp10 + bmi + smokerf +
                     arcus0 + dibpat0f + agegroup,
                   data = dc,
@@ -183,12 +194,35 @@ full_model <- glm(chd69 ~  age0 + cholmmol + sbp10 + bmi + smokerf +
 
 step_model <- step(full_model, direction = "backward")
 
-#summary(step_model)
+
+```
+
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+# m <- glm(chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf +
+#                     arcus0 + dibpat0f, 
+#          data = dc, family = binomial)
+# 
+# dc$logit <- predict(m, type = "link")
+# 
+# plot(dc$age0, dc$logit)
+# plot(dc$cholmmol, dc$logit)
+# plot(dc$sbp10, dc$logit)
+# plot(dc$bmi, dc$logit)
+# plot(dc$smokerf, dc$logit)
+# plot(dc$arcus0, dc$logit)
+# plot(dc$dibpat0f, dc$logit)
 
 
 
 
 ```
+
+
+
+
+
+
 ```{r, echo=FALSE}
 coef_table <- data.frame(
   Variable = c("(Intercept)", "age0", "cholmmol", "sbp10", "bmi", 
@@ -212,6 +246,24 @@ kable(coef_table, digits = 4, caption = "Logistic Regression Coefficient Table")
 
 In the step-model only one of the variables is not statistically significant.
 
+The step-wise model has the following form: 
+
+\[
+\begin{aligned}
+\text{logit}\big(P(\text{CHD}_i = 1)\big)
+&= \beta_0
++ \beta_1 \cdot \text{age0}_i
++ \beta_2 \cdot \text{cholmmol}_i
++ \beta_3 \cdot \text{sbp10}_i \\
+&\quad
++ \beta_4 \cdot \text{bmi}_i
++ \beta_5 \cdot \text{smoker}_i
++ \beta_6 \cdot \text{arcus0}_i
++ \beta_7 \cdot \text{dibpat0fA}_i.
+\end{aligned}
+\]
+
+
 
 ```{r, echo=FALSE}
 #AIC(full_model)
@@ -223,6 +275,11 @@ In the step-model only one of the variables is not statistically significant.
 
 ```
 
+
+
+Furthermore, we compared the AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) values of the full model and the stepwise model. Both criteria favored the stepwise model, as it achieved lower AIC and BIC values than the full model. This indicates that the stepwise model provides a better balance between goodness of fit and model complexity.
+
+
 **Table: Comparison of AIC and BIC Between Models**
 
 | Metric                | Value    |
@@ -232,9 +289,6 @@ In the step-model only one of the variables is not statistically significant.
 | BIC (Full Model)      | 1657.589 |
 | BIC (Stepwise Model)  | 1642.640 |
 
-
-
-Furthermore, we compared the AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) values of the full model and the stepwise model. Both criteria favored the stepwise model, as it achieved lower AIC and BIC values than the full model. This indicates that the stepwise model provides a better balance between goodness of fit and model complexity.
 
 
 ## Part 2
@@ -331,14 +385,16 @@ interaction_model_smookerf_sbp10$aic
 ```
 
 Several interaction terms were tested to assess whether the effect of one predictor on CHD depended on another predictor. The interactions were selected based on clinical reasoning and included age with cholesterol, age with systolic blood pressure, smoking with cholesterol, smoking with systolic blood pressure, and BMI with cholesterol.
-First, a model containing all interaction terms was fitted. Then, individual models were fitted in which each interaction term was added separately together with all main predictors. For each model, AIC values were compared with those from the stepwise-selected main-effects model, and the significance of the interaction term was evaluated.
-Across these models, most interaction terms did not improve model performance and were not statistically significant. Only the BMI with cholesterol interaction improved the model by lowering the AIC and showing statistical significance. This indicates that, while most predictors act independently in this dataset, the BMI with cholesterol interaction may slightly modify the effect of one predictor on CHD.
+
+First, a model containing all interaction terms was fitted. Then, individual models were fitted in which each interaction term was added separately together with all main predictors. For each model, AIC values were compared with those from the stepwise model and the significance of the interaction term was evaluated.
+
+Across these models, most interaction terms did not improve model performance and were not statistically significant. Only the BMI with cholesterol interaction improved the model by lowering the AIC and showing statistical significance. This indicates that, while most predictors act independently in this dataset, the BMI with cholesterol interaction slightly modify the effect of one predictor on CHD.
 
 
 
 
 
-```{r}
+```{r, echo=FALSE}
 
 aic_table <- data.frame(
   Model = c("Interaction Model (bmi × cholmmol)", "Stepwise Model"),
@@ -376,6 +432,7 @@ In the Table 5 can be seen that the interaction is statistically significant.
 
 
 
+
 Furthermore, a likelihood ratio test was conducted to compare the stepwise-selected main‐effects model with the model that included the BMI × cholesterol interaction term.
 
 ```{r lrt-test, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
@@ -405,6 +462,28 @@ kable(lrt_table,
 
 This result suggests that the effect of cholesterol on CHD risk depends on BMI,
 and that including the bmi × cholmmol interaction provides additional information.
+
+
+After testing if the interaction model is suitable for this analysis the model that is chosen is: 
+
+\[
+\begin{aligned}
+\text{logit}\big(P(\text{CHD}_i = 1)\big)
+&= \beta_0 
++ \beta_1 \cdot \text{age0}_i
++ \beta_2 \cdot \text{cholmmol}_i
++ \beta_3 \cdot \text{sbp10}_i \\
+&\quad
++ \beta_4 \cdot \text{bmi}_i
++ \beta_5 \cdot \text{smoker}_i
++ \beta_6 \cdot \text{arcus0}_i \\
+&\quad
++ \beta_7 \cdot \text{dibpat0fA}_i
++ \beta_8 \cdot (\text{cholmmol}_i \cdot \text{bmi}_i).
+\end{aligned}
+\]
+
+
 
 ## Part 3
 
