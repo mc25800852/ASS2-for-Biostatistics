@@ -139,6 +139,8 @@ mean(dc$chd69)
 
 Meaning that the overall prevalence is 8%.
 
+\newpage
+
 # Task 3
 
 ## Part 1
@@ -197,21 +199,34 @@ step_model <- step(full_model, direction = "backward")
 
 ```
 
+To assess whether the continuous predictors satisfy the logistic regression assumption of linearity in the logit, scatterplots of each predictor against the predicted log-odds were created. 
+They show that the requirement for linearity is met and step-wise logistic regression could be used. 
 
-```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
-# m <- glm(chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf +
-#                     arcus0 + dibpat0f, 
-#          data = dc, family = binomial)
-# 
-# dc$logit <- predict(m, type = "link")
-# 
-# plot(dc$age0, dc$logit)
-# plot(dc$cholmmol, dc$logit)
-# plot(dc$sbp10, dc$logit)
-# plot(dc$bmi, dc$logit)
-# plot(dc$smokerf, dc$logit)
-# plot(dc$arcus0, dc$logit)
-# plot(dc$dibpat0f, dc$logit)
+
+```{r, echo=FALSE}
+
+
+dc$logit <- predict(step_model, type = "link")
+
+# Arrange plots in 2 x 2 grid
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+
+# Age
+plot(dc$age0, dc$logit, main = "Age vs Logit")
+lines(lowess(dc$age0, dc$logit), col = "red", lwd = 2)
+
+# Cholesterol
+plot(dc$cholmmol, dc$logit, main = "Cholesterol vs Logit")
+lines(lowess(dc$cholmmol, dc$logit), col = "red", lwd = 2)
+
+# Systolic BP
+plot(dc$sbp10, dc$logit, main = "SBP10 vs Logit")
+lines(lowess(dc$sbp10, dc$logit), col = "red", lwd = 2)
+
+# BMI
+plot(dc$bmi, dc$logit, main = "BMI vs Logit")
+lines(lowess(dc$bmi, dc$logit), col = "red", lwd = 2)
+
 
 
 
@@ -220,6 +235,8 @@ step_model <- step(full_model, direction = "backward")
 
 
 
+
+Below the coefficients of the step-wise model could be seen. Only one of them is not statistically significant. 
 
 
 
@@ -244,9 +261,7 @@ kable(coef_table, digits = 4, caption = "Logistic Regression Coefficient Table")
 
 
 
-In the step-model only one of the variables is not statistically significant.
-
-The step-wise model has the following form: 
+Therefore, the chosen step-wise model has the following form: 
 
 \[
 \begin{aligned}
