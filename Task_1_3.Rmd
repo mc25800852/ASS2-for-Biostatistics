@@ -17,7 +17,6 @@ bibliography: references.bib
 #install.packages("car")
 ```
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(comment = "", message = FALSE, warning = FALSE)
 library(tableone)
@@ -85,8 +84,6 @@ print(table1)
 
 ```
 
-
-
 # Taks 2
 
 ## What is the outcome we are interested in?
@@ -95,8 +92,8 @@ We are interested in the outcome coronary heart disease
 
 ## What are the known risk factors for our outcome of interest?
 
-The known factors that cause risk for the particular desease are
-ceparated into two groups (modifiable and non-modifiable)
+The known factors that cause risk for the particular disease are
+separated into two groups (modifiable and non-modifiable)
 [@cdc_heart_disease_risk_factors].
 
 Modifiable risk factors are:
@@ -133,10 +130,9 @@ Meaning that the overall prevalence is 8%.
 
 ## Part 1
 
-
-Before building a predictive model, a correlation matrix was calculated to
-check for variables with strong correlation. The threshhold for strong correlation is 0.8.
-
+Before building a predictive model, a correlation matrix was calculated
+to check for variables with strong correlation. The threshold for strong
+correlation is 0.8.
 
 ```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
 numeric_vars <- dc %>% 
@@ -147,32 +143,35 @@ round(cor_matrix, 2)
 
 ```
 
-
-
 **Table 1: Correlation Matrix of Numeric Variables**
 
-|       | id   | age0 | cholmmol | sbp10 | bmi  | arcus0 | chd69 |
-|-------|------|------|----------|-------|------|--------|-------|
-| id      | 1.00 | -0.05 | 0.06 | -0.05 | 0.03 | -0.02 | 0.00 |
-| age0    | -0.05 | 1.00 | 0.09 | 0.17 | 0.03 | 0.19 | 0.12 |
-| cholmmol| 0.06 | 0.09 | 1.00 | 0.12 | 0.07 | 0.13 | 0.15 |
-| sbp10   | -0.05 | 0.17 | 0.12 | 1.00 | 0.29 | 0.03 | 0.13 |
-| bmi     | 0.03 | 0.03 | 0.07 | 0.29 | 1.00 | -0.03 | 0.06 |
-| arcus0  | -0.02 | 0.19 | 0.13 | 0.03 | -0.03 | 0.19 | 0.07 |
-| chd69   | 0.00 | 0.12 | 0.15 | 0.13 | 0.06 | 0.07 | 1.00 |
-
+|          | id    | age0  | cholmmol | sbp10 | bmi   | arcus0 | chd69 |
+|----------|-------|-------|----------|-------|-------|--------|-------|
+| id       | 1.00  | -0.05 | 0.06     | -0.05 | 0.03  | -0.02  | 0.00  |
+| age0     | -0.05 | 1.00  | 0.09     | 0.17  | 0.03  | 0.19   | 0.12  |
+| cholmmol | 0.06  | 0.09  | 1.00     | 0.12  | 0.07  | 0.13   | 0.15  |
+| sbp10    | -0.05 | 0.17  | 0.12     | 1.00  | 0.29  | 0.03   | 0.13  |
+| bmi      | 0.03  | 0.03  | 0.07     | 0.29  | 1.00  | -0.03  | 0.06  |
+| arcus0   | -0.02 | 0.19  | 0.13     | 0.03  | -0.03 | 0.19   | 0.07  |
+| chd69    | 0.00  | 0.12  | 0.15     | 0.13  | 0.06  | 0.07   | 1.00  |
 
 The matrix shows that none of the variables exceed the threshold of 0.8,
-therefore there is no risk for multicollinearity in this dataset. 
-Meaning that it is not necessary to remove any of the variables at this stage 
-of the analysis, since every variable contributes uniquely.
+therefore there is no risk for multicollinearity in this dataset.
+Meaning that it is not necessary to remove any of the variables at this
+stage of the analysis, since every variable contributes uniquely.
 
-
-The next step was to fit the full logistic regression model, which included all available predictors in the cleaned dataset. This model was then compared to a reduced model obtained using backward stepwise selection, where predictors were removed based on their contribution to model fit. In our case the function only excluded one of the initial variables (agegroup). The result yelds that the step model had better performance compared to the original one. 
-This is concluded since AIC value is lower than in the full model. 
-This result is also conceptually reasonable since agegroup and age0 represent the same underlying information and including both in the model introduces redundancy. Moreover, age0 is more informative as a continuous variable and agegroup was appropriately removed by the stepwise algorithm.
-
-
+The next step was to fit the full logistic regression model, which
+included all available predictors in the cleaned dataset. This model was
+then compared to a reduced model obtained using backward stepwise
+selection, where predictors were removed based on their contribution to
+model fit. In our case the function only excluded one of the initial
+variables (agegroup). The result yelds that the step model had better
+performance compared to the original one. This is concluded since AIC
+value is lower than in the full model. This result is also conceptually
+reasonable since agegroup and age0 represent the same underlying
+information and including both in the model introduces redundancy.
+Moreover, age0 is more informative as a continuous variable and agegroup
+was appropriately removed by the stepwise algorithm.
 
 ```{r}
 full_model <- glm(chd69 ~  age0 + cholmmol + sbp10 + bmi + smokerf +
@@ -189,6 +188,7 @@ step_model <- step(full_model, direction = "backward")
 
 
 ```
+
 ```{r, echo=FALSE}
 coef_table <- data.frame(
   Variable = c("(Intercept)", "age0", "cholmmol", "sbp10", "bmi", 
@@ -206,12 +206,8 @@ coef_table <- data.frame(
 kable(coef_table, digits = 4, caption = "Logistic Regression Coefficient Table")
 ```
 
-
-
-
-
-In the step-model only one of the variables is not statistically significant.
-
+In the step-model only one of the variables is not statistically
+significant.
 
 ```{r, echo=FALSE}
 #AIC(full_model)
@@ -225,21 +221,21 @@ In the step-model only one of the variables is not statistically significant.
 
 **Table: Comparison of AIC and BIC Between Models**
 
-| Metric                | Value    |
-|-----------------------|----------|
-| AIC (Full Model)      | 1597.072 |
-| AIC (Stepwise Model)  | 1594.227 |
-| BIC (Full Model)      | 1657.589 |
-| BIC (Stepwise Model)  | 1642.640 |
+| Metric               | Value    |
+|----------------------|----------|
+| AIC (Full Model)     | 1597.072 |
+| AIC (Stepwise Model) | 1594.227 |
+| BIC (Full Model)     | 1657.589 |
+| BIC (Stepwise Model) | 1642.640 |
 
-
-
-Furthermore, we compared the AIC (Akaike Information Criterion) and BIC (Bayesian Information Criterion) values of the full model and the stepwise model. Both criteria favored the stepwise model, as it achieved lower AIC and BIC values than the full model. This indicates that the stepwise model provides a better balance between goodness of fit and model complexity.
-
+Furthermore, we compared the AIC (Akaike Information Criterion) and BIC
+(Bayesian Information Criterion) values of the full model and the
+stepwise model. Both criteria favored the stepwise model, as it achieved
+lower AIC and BIC values than the full model. This indicates that the
+stepwise model provides a better balance between goodness of fit and
+model complexity.
 
 ## Part 2
-
-
 
 ```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
 
@@ -330,13 +326,22 @@ interaction_model_smookerf_sbp10$aic
 
 ```
 
-Several interaction terms were tested to assess whether the effect of one predictor on CHD depended on another predictor. The interactions were selected based on clinical reasoning and included age with cholesterol, age with systolic blood pressure, smoking with cholesterol, smoking with systolic blood pressure, and BMI with cholesterol.
-First, a model containing all interaction terms was fitted. Then, individual models were fitted in which each interaction term was added separately together with all main predictors. For each model, AIC values were compared with those from the stepwise-selected main-effects model, and the significance of the interaction term was evaluated.
-Across these models, most interaction terms did not improve model performance and were not statistically significant. Only the BMI with cholesterol interaction improved the model by lowering the AIC and showing statistical significance. This indicates that, while most predictors act independently in this dataset, the BMI with cholesterol interaction may slightly modify the effect of one predictor on CHD.
-
-
-
-
+Several interaction terms were tested to assess whether the effect of
+one predictor on CHD depended on another predictor. The interactions
+were selected based on clinical reasoning and included age with
+cholesterol, age with systolic blood pressure, smoking with cholesterol,
+smoking with systolic blood pressure, and BMI with cholesterol. First, a
+model containing all interaction terms was fitted. Then, individual
+models were fitted in which each interaction term was added separately
+together with all main predictors. For each model, AIC values were
+compared with those from the stepwise-selected main-effects model, and
+the significance of the interaction term was evaluated. Across these
+models, most interaction terms did not improve model performance and
+were not statistically significant. Only the BMI with cholesterol
+interaction improved the model by lowering the AIC and showing
+statistical significance. This indicates that, while most predictors act
+independently in this dataset, the BMI with cholesterol interaction may
+slightly modify the effect of one predictor on CHD.
 
 ```{r}
 
@@ -351,8 +356,6 @@ kable(
   caption = "Table: Comparison of AIC Between Interaction Model and Stepwise Model"
 )
 ```
-
-
 
 ```{r, echo=FALSE}
 coef_table_interaction <- data.frame(
@@ -372,17 +375,16 @@ kable(coef_table_interaction, digits = 4,
       caption = " Logistic Regression Coefficients for the Model Including the BMI × Cholesterol Interaction")
 ```
 
-In the Table 5 can be seen that the interaction is statistically significant.
+In the Table 5 can be seen that the interaction is statistically
+significant.
 
-
-
-Furthermore, a likelihood ratio test was conducted to compare the stepwise-selected main‐effects model with the model that included the BMI × cholesterol interaction term.
+Furthermore, a likelihood ratio test was conducted to compare the
+stepwise-selected main‐effects model with the model that included the
+BMI × cholesterol interaction term.
 
 ```{r lrt-test, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
 anova(step_model, interaction_model_bmi_cholmmol, test = "LRT")
 ```
-
-
 
 ```{r, echo=FALSE}
 library(knitr)
@@ -402,9 +404,9 @@ kable(lrt_table,
 
 ```
 
-
-This result suggests that the effect of cholesterol on CHD risk depends on BMI,
-and that including the bmi × cholmmol interaction provides additional information.
+This result suggests that the effect of cholesterol on CHD risk depends
+on BMI, and that including the bmi × cholmmol interaction provides
+additional information.
 
 ## Part 3
 
@@ -414,7 +416,158 @@ dc$predicted_risk <- predict(interaction_model_bmi_cholmmol, newdata = dc, type 
 kable(head(dc), digits=3)
 ```
 
+# Task 4
 
+## a)
+
+To discriminate between the cases and non-cases please plot the ROC curve and calculate the derived AUC including 95% confidence intervals.
+
+```{r}
+library(pROC)
+#ROC curve object using pROC package
+roc_curve <- roc(dc$chd69, dc$predicted_risk)
+
+#Plotting ROC Curve
+plot(roc_curve, col = "blue", main = "ROC Curve", print.auc = TRUE)
+
+#AUC
+auc_app <- auc(roc_curve)
+
+# 95% CI for AUC
+auc_ci <- ci.auc(roc_curve)
+
+
+```
+The derived AUC (area under the curve): $0.753$
+The $95\%$ Confidence Interval for AUC: $(0.7237,0.7824)$
+
+## b)
+
+Find the threshold that maximizes the sum of the sensitivity and
+specificity. Please report the sensitivity and specificity at that
+threshold.
+
+```{r, echo=FALSE}
+#Make a data frame with the sensitivities, specificity, and thresholds
+roc_df <- data.frame(roc_curve$sensitivities,roc_curve$specificities, roc_curve$thresholds)
+
+#Make a column for the sum of the sensitivities and specificity
+roc_df$sum <- (roc_df$roc_curve.sensitivities + roc_df$roc_curve.specificities)
+
+#Find the threshold, sens, and spec when sum is max
+#roc_df[roc_df$sum == max(roc_df$sum), 1:3]
+
+```
+
+The threshold that maximizes the sum of the sensitivity and specificity
+is 0.09042859. 
+Where sensitivity = 0.6811024 and specificity = 0.7178510
+
+## c)
+
+AUC adjusted for optimism. To adjust for optimism in the predictions, we
+can use the bootstrapping method using 200 repetitions. Please calculate
+the adjusted AUC with 95% confidence intervals and compare it to the
+unadjusted AUC. Is there a difference in the unadjusted and the adjusted
+AUC? Note: please do not use pre-programmed functions in R to answer
+this question.
+
+```{r}
+#Set the seed for reproducability 
+set.seed("206")
+
+optimism <- numeric(200)
+for (i in 1:200){
+  #Sample with replacement -> bootstrap sample boot_data
+  boot_index <- sample(1:nrow(dc), replace = TRUE)
+  boot_data <- dc[boot_index, ]
+  
+  #Fit model on boot_data
+  boot_model <- glm( chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f + bmi:cholmmol,
+                     data = boot_data,
+                     family = binomial)
+  
+  
+  #Find AUC for boot_data
+  boot_data$boot_pred <- predict(boot_model, 
+                                 newdata = boot_data, 
+                                 type = "response")
+  boot_roc <- roc(boot_data$chd69,boot_data$boot_pred)
+  boot_auc <- auc(boot_roc)
+  
+  #AUC_test(b) on original data
+  test_pred <- predict(boot_model, 
+                       newdata = dc, 
+                       type = "response")
+  test_roc <- roc(dc$chd69,test_pred)
+  test_auc <- auc(test_roc)
+  
+  #Optimism(b) = AUC_boot(b) - AUC_test(b)
+  optimism[i] <- boot_auc - test_auc
+  
+  
+}
+#Optimism_mean = average optimism(b)
+optimism_mean <- mean(optimism)
+
+#AUC_corrected = AUC_app – optimism_mean
+auc_corrected <- auc_app - optimism_mean
+
+#c(auc_app, auc_corrected)
+```
+
+```{r,echo=FALSE}
+auc_corrected_values <- auc_app - optimism
+
+c(quantile(auc_corrected_values, 0.025), quantile(auc_corrected_values, 0.975))
+```
+Unadjusted AUC: $0.7530452$ 
+Unadjusted CI: $(0.7237,0.7824)$
+
+Adjusted AUC: $0.7461568$
+Ajusted CI: $(0.7168202, 0.7746566)$ 
+
+As we can see here the adjusted AUC is slightly less than the unadjusted AUC, this makes sense since we are subtracting the optimism in order to get the adjusted value. The confidence interval for the adjusted is shifted down aswell. 
+
+
+## d)
+
+Cross validation. Use 10-fold cross-validation for a logistic model to
+obtain the adjusted AUC and compare to the unadjusted and adjusted AUC.
+
+```{r}
+
+folds <- sample(rep(1:10, length.out = nrow(dc)))
+
+cv_pred <- rep(NA, nrow(dc))
+
+for (i in 1:10) {
+  
+  train <- which(folds != i)
+  test <- which(folds == i)
+  
+  # Train on K-1 folds
+  cv_model <- glm(chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f + bmi:cholmmol,
+               data = dc[train, ], 
+               family = binomial)
+  
+  #
+  cv_pred[test] <- predict(cv_model,
+                            newdata = dc[test, ], 
+                            type = "response")
+  
+}
+
+cv_roc <- roc(dc$chd69, cv_pred)
+cv_auc <- auc(cv_roc)
+
+```
+
+Unadjusted AUC: $0.7530452$ 
+Bootstrap Optimism Adjusted AUC: $0.7461568$
+Cross Validation Adjusted AUC: $0.7415$
+
+The Cross Validation adjusted AUC is less than the unadjusted AUC and is slightly less and the Bootstrap Optimism Adjusted AuC
 
 
 # References
