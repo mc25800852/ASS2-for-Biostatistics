@@ -1017,8 +1017,8 @@ overlap, as it can be verified from the following results:
 
 | Model           | AUC 95% Confidence Interval |
 |-----------------|-----------------------------|
-| Final Model     | 0.7237 – 0.7824             |
-| Age-Only Model  | 0.5765 – 0.6416             |
+| Final Model     | (0.7237, 0.7824)            |
+| Age-Only Model  | (0.5765, 0.6416)            |
 
 #### 5e.
 
