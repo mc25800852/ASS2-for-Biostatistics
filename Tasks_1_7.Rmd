@@ -1,0 +1,1238 @@
+---
+title: "Biostatistics 1 - Assignment 1"
+author: "Group 3: William Fleury Dziuk, Galya Gadzhalova, Chen Ma, Afroditi-Iliana Zotou"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+  html_document:
+    df_print: paged
+editor_options:
+  markdown:
+    wrap: 72
+# bibliography: references.bib
+---
+
+```{r, echo=FALSE}
+#install.packages("car")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(comment = "", message = FALSE, warning = FALSE)
+library(tableone)
+library(knitr)
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+pacman::p_load(tidyverse,rms,haven,mgcv,epitools,logistf,nlpred,geepack,
+skimr,pROC,tableone,emmeans,glmtoolbox,CalibrationCurves,mice, dcurves)
+```
+
+### Introduction
+
+Here we study the outcome coronary heart disease (CHD, variable name in
+our <data:chd69>). Our task is to find a prediction model for the risk
+of CHD. We will consider the following covariates/predictors which are
+previously known risk factors for heart disease: behaviour type A/B,
+age, systolic bp, cholesterol, bmi, smoking, and arcus.
+
+We have access to the dataset wcgs or the Western Collaborative Group
+Study data. This is a prospective cohort study, that recruited
+middle-aged men (ages 39 to 59) who were employees of 10 California
+companies and collected data on 3154 individuals during the years
+1960-1961. These subjects were primarily selected to study the
+relationship between behavior pattern and the risk of coronary hearth
+disease (CHD). A number of other risk factors were also measured to
+provide the best possible assessment of the CHD risk associated with
+behavior type. Additional variables collected include age, height,
+weight, systolic blood pressure, diastolic blood pressure, cholesterol,
+smoking, and corneal arcus
+
+### Preparing for analysis and cleaning the data {.unnumbered}
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+# read in the data
+data(wcgs)
+# create factors from var ditpat0 with levels B and A in stead of 0 and 1
+wcgs$dibpat0f<-factor(wcgs$dibpat0,levels=0:1,label=c("B","A"))
+# create categories for age
+wcgs$agegroup <- cut(wcgs$age0,breaks=c(39,45,55,60),include.lowest = T,right = FALSE)
+# binary variable for smoker or not
+wcgs$smoker <- ifelse(wcgs$ncigs0>0,1,0)
+wcgs$smokerf <- factor(wcgs$smoker,levels=c(0,1),labels=c("No","Yes"))
+# convert height from inches to cm
+wcgs$heightcm <- wcgs$height0*2.54
+wcgs$weightkg <- wcgs$weight0*0.45359237
+wcgs$bmi <- wcgs$weightkg / (wcgs$heightcm/100)^2
+wcgs$bmicat <- cut(wcgs$bmi,breaks=c(0,25,30,40),include.lowest = T,right = FALSE)
+wcgs$cholmmol <- wcgs$chol0/39
+wcgs$sbp10 <- wcgs$sbp0/10
+# Create categories of sbp (systolic blood pressure). Make sure to have the lowest and highe
+wcgs$sbpcat <- cut(wcgs$sbp0,breaks=c(0,140,240),include.lowest = T,right = FALSE)
+# For use when tabulating the data you can create labels
+wcgs$chd69f <- factor(wcgs $chd69,levels=c(0,1),labels=c("No","Yes"))
+wcgs$cholmmol <- ifelse(wcgs$cholmmol<15,wcgs$cholmmol,NA)
+```
+
+In this analysis we’ll consider the following variables:
+
+chd69 age systolic bp cholesterol bmi smoking arcus behaviour type
+
+A new dataframe was created containing only the variables relevant for
+the analysis.
+
+```{r}
+d <- wcgs %>% select(id,agegroup,age0,cholmmol,sbp10,bmi,smokerf,arcus0,dibpat0f,chd69)
+```
+
+After that, all complete cases were extracted from the cleaned dataset.
+
+```{r}
+# Complete cases of the cleaned data*
+dc <- d %>% drop_na()
+```
+
+### Task 1 - Table 1
+
+**Task:** Create table 1. Describe all available variables in the data.
+We will continue with the complete case data we have now called dc
+
+**Answer:**: The following table summarizes the characteristics of the
+complete case dataset (dc) for the variables we are considering.
+
+Continuous variables are presented as mean (Standard Deviation - SD) and
+categorical variables are presented as number ($n$) (%). Our complete
+case data (dc) includes $n=3139$ individuals.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+vars <- c("id", "agegroup", "age0", "cholmmol", "sbp10", "bmi",
+          "smokerf", "arcus0", "dibpat0f", "chd69")
+
+# create table 1
+table1 <- CreateTableOne(vars = vars, data = dc)
+
+print(table1)
+```
+
+### Task 2 - Overall risk or overall rate
+
+**Task:** What is the outcome we are interested in?
+
+**Answer:** We are interested in the outcome coronary heart disease
+(CHD). In our dataset the variable for this is chd69. Overall, our task
+is to find a prediction model for the risk of CHD.
+
+**Task:** What are the known risk factors for our outcome of interest?
+
+**Answer:** The known risk factors (covariates/predictors) for our
+outcome of interest, Coronary Heart Disease (CHD), are: Behaviour type
+(Type A/B), Age, Systolic blood pressure (systolic bp), Cholesterol,
+BMI, Smoking, Arcus (corneal arcus)
+
+These are the variables that have been previously known as risk factors
+for heart disease and are taken into consideration for our model.
+
+*The known factors that cause risk for the particular disease are
+separated into two groups (modifiable and non-modifiable)
+[@cdc_heart_disease_risk_factors].*
+
+*Modifiable risk factors are:*
+
+-   *smoking*
+-   *physical inactivity*
+-   *unhealthy diet*
+-   *high blood pressure*
+-   *unhealthy blood cholesterol levels*
+
+*Non-modifiable risk factors are:*
+
+-   *sex*
+-   *ethnicity*
+-   *age*
+-   *family history (genetics)*
+
+**Task:** How many people are included?
+
+**Answer:** The dataset used for this analysis contains 3.139
+observations.
+
+**Task:** What is the overall prevalence of the disease in our cohort?
+
+**Answer:** To find the overall prevalence (the percentage of people who
+have the disease), we look at the mean value of the binary outcome
+variable (chd69) reported in Table 1. So, the overall prevalence is 8%
+
+### Task 3 - Building the model and choosing predictors
+
+#### 3a.
+
+**Task:** Use the available data to create the optimal prediction model
+for our outcome, choose the appropriate model and the predictors that
+will improve your predictions. Please explain the reasons for choosing
+the model type you chose and why the predictors were chosen.
+
+**Answer:**
+
+Before building a predictive model, a correlation matrix was calculated
+to check for variables with strong correlation. The threshold for strong
+correlation is 0.8.
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+numeric_vars <- dc %>% 
+  select(where(is.numeric))
+
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+round(cor_matrix, 2)
+
+
+# install.packages("corrplot")
+library(corrplot)
+
+numeric_vars <- dc %>% select(where(is.numeric))
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+
+corrplot(cor_matrix, method = "color",
+         type = "upper",
+         tl.col = "black",
+         tl.srt = 45)
+
+
+```
+
+**Table 1: Correlation Matrix of Numeric Variables**
+
+|          | id    | age0  | cholmmol | sbp10 | bmi   | arcus0 | chd69 |
+|----------|-------|-------|----------|-------|-------|--------|-------|
+| id       | 1.00  | -0.05 | 0.06     | -0.05 | 0.03  | -0.02  | 0.00  |
+| age0     | -0.05 | 1.00  | 0.09     | 0.17  | 0.03  | 0.19   | 0.12  |
+| cholmmol | 0.06  | 0.09  | 1.00     | 0.12  | 0.07  | 0.13   | 0.15  |
+| sbp10    | -0.05 | 0.17  | 0.12     | 1.00  | 0.29  | 0.03   | 0.13  |
+| bmi      | 0.03  | 0.03  | 0.07     | 0.29  | 1.00  | -0.03  | 0.06  |
+| arcus0   | -0.02 | 0.19  | 0.13     | 0.03  | -0.03 | 0.19   | 0.07  |
+| chd69    | 0.00  | 0.12  | 0.15     | 0.13  | 0.06  | 0.07   | 1.00  |
+
+The matrix shows that none of the variables exceed the threshold of 0.8,
+therefore there is no risk for multicollinearity in this dataset.
+Meaning that it is not necessary to remove any of the variables at this
+stage of the analysis, since every variable contributes uniquely.
+
+A logistic regression model was selected for this analysis because the
+outcome variable is binary and diagnostic checks indicated no evidence
+of multicollinearity among the predictors.
+
+The next step was to fit the full logistic regression model which
+included all available predictors in the cleaned dataset. This model was
+then compared to a reduced model obtained using backward stepwise
+selection, where predictors were removed based on their contribution to
+the model fit. In our case the function only excluded one of the initial
+variables (agegroup).
+
+The result yelds that the step model had better performance compared to
+the original one. This is concluded since its AIC value is lower (namely
+1594.23) than in the full model (namely AIC of 1597.07). This result is
+also conceptually reasonable since agegroup and age0 represent the same
+underlying information and including both of them in the model
+introduces redundancy. Moreover, age0 is more informative as a
+continuous variable and agegroup was appropriately removed by the
+stepwise algorithm.
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+full_model <- glm(chd69 ~  age0 + cholmmol + sbp10 + bmi + smokerf +
+                    arcus0 + dibpat0f + agegroup,
+                  data = dc,
+                  family = binomial)
+
+
+step_model <- step(full_model, direction = "backward")
+
+```
+
+To assess whether the continuous predictors satisfy the logistic
+regression assumption of linearity in the logit, scatterplots of each
+predictor against the predicted log-odds were created. They show that
+the requirement for linearity is met and step-wise logistic regression
+could be used.
+
+```{r, echo=FALSE}
+
+
+dc$logit <- predict(step_model, type = "link")
+
+# Arrange plots in 2 x 2 grid
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+
+# Age
+plot(dc$age0, dc$logit, main = "Age vs Logit")
+lines(lowess(dc$age0, dc$logit), col = "red", lwd = 2)
+
+# Cholesterol
+plot(dc$cholmmol, dc$logit, main = "Cholesterol vs Logit")
+lines(lowess(dc$cholmmol, dc$logit), col = "red", lwd = 2)
+
+# Systolic BP
+plot(dc$sbp10, dc$logit, main = "SBP10 vs Logit")
+lines(lowess(dc$sbp10, dc$logit), col = "red", lwd = 2)
+
+# BMI
+plot(dc$bmi, dc$logit, main = "BMI vs Logit")
+lines(lowess(dc$bmi, dc$logit), col = "red", lwd = 2)
+
+```
+
+In the following table the coefficients of the step-wise model are
+presented. Only one of them is not statistically significant.
+
+```{r, echo=FALSE}
+coef_table <- data.frame(
+  Variable = c("(Intercept)", "age0", "cholmmol", "sbp10", "bmi", 
+               "smokerfYes", "arcus0", "dibpat0fA"),
+  Estimate = c(-12.24944, 0.05725, 0.40142, 0.18205, 0.05928,
+               0.60023, 0.22038, 0.70145),
+  Std_Error = c(0.98648, 0.01226, 0.06004, 0.04156, 0.02659,
+                0.14191, 0.14340, 0.14510),
+  Z_value = c(-12.417, 4.669, 6.686, 4.380, 2.229,
+              4.230, 1.537, 4.834),
+  P_value = c("< 2e-16", "3.03e-06", "2.30e-11", "1.18e-05", "0.0258",
+              "2.34e-05", "0.1243", "1.34e-06")
+)
+
+kable(coef_table, digits = 4, caption = "Logistic Regression Coefficient Table")
+```
+
+Therefore, the chosen step-wise model has the following form:
+
+$$
+\begin{aligned}
+\text{logit}\big(P(\text{CHD}_i = 1)\big)
+&= \beta_0
++ \beta_1 \cdot \text{age0}_i
++ \beta_2 \cdot \text{cholmmol}_i
++ \beta_3 \cdot \text{sbp10}_i \\
+&\quad
++ \beta_4 \cdot \text{bmi}_i
++ \beta_5 \cdot \text{smoker}_i
++ \beta_6 \cdot \text{arcus0}_i
++ \beta_7 \cdot \text{dibpat0fA}_i.
+\end{aligned}
+$$
+
+Below are presented the AIC (Akaike Information Criterion) and BIC
+(Bayesian Information Criterion) values of the full model and the
+stepwise model. In general, the lower the AIC and BIC values, the more
+optimal the model is. Both criteria favored the stepwise model, which
+indicates that the stepwise model provides a better balance between
+goodness of fit and model complexity.
+
+**Table: Comparison of AIC and BIC Between Models**
+
+| Metric               | Value    |
+|----------------------|----------|
+| AIC (Full Model)     | 1597.072 |
+| AIC (Stepwise Model) | 1594.227 |
+| BIC (Full Model)     | 1657.589 |
+| BIC (Stepwise Model) | 1642.640 |
+
+#### 3b.
+
+**Task:** Are there any predictors that should be included as
+interaction terms with other variables or as categorical variables? If
+so, please explain the reasoning for this in the model?
+
+**Answer:**
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+
+interaction_model <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    age0:cholmmol +
+    age0:sbp10 +
+    smokerf:cholmmol +
+    smokerf:sbp10,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_smookerf_sbp10 <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    smokerf:sbp10,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_smoker_cholmmol <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    smokerf:cholmmol,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_age0_sbp <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    age0:sbp10,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_age0_cholmmol <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    age0:cholmmol,
+  data = dc,
+  family = binomial
+)
+
+
+interaction_model_bmi_cholmmol <- glm(
+  chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f +
+    bmi:cholmmol,
+  data = dc,
+  family = binomial
+)
+
+AIC(step_model, interaction_model)
+BIC(step_model, interaction_model)
+
+AIC(step_model, interaction_model_age0_cholmmol)
+BIC(step_model, interaction_model_age0_cholmmol)
+
+AIC(step_model, interaction_model_age0_sbp)
+BIC(step_model, interaction_model_age0_sbp)
+
+AIC(step_model, interaction_model_smoker_cholmmol)
+BIC(step_model, interaction_model_smoker_cholmmol)
+
+AIC(step_model, interaction_model_smookerf_sbp10)
+BIC(step_model, interaction_model_smookerf_sbp10)
+
+AIC(step_model, interaction_model_bmi_cholmmol)
+BIC(step_model, interaction_model_bmi_cholmmol)
+
+
+summary(interaction_model)
+summary(interaction_model_age0_cholmmol)
+summary(interaction_model_age0_sbp)
+summary(interaction_model_smoker_cholmmol)
+summary(interaction_model_smookerf_sbp10)
+summary(interaction_model_bmi_cholmmol)
+
+interaction_model$aic
+interaction_model_age0_cholmmol$aic
+interaction_model_age0_sbp$aic
+interaction_model_bmi_cholmmol$aic
+interaction_model_smoker_cholmmol$aic
+interaction_model_smookerf_sbp10$aic
+
+```
+
+Several interaction terms were tested to assess whether the effect of
+one predictor on CHD depended on another predictor. We mainly
+investigated two-way interactions, since three or four-way interactions
+would be difficult to interpret clinically and would potentially lead to
+overfitting.
+
+The interactions were selected based on clinical reasoning and included
+age $\times$ cholesterol, age $\times$ systolic blood pressure, smoking
+$\times$ cholesterol, smoking $\times$ systolic blood pressure, and BMI
+$\times$ cholesterol.
+
+First, a model containing all interaction terms was fitted. Then,
+individual models were fitted in which each interaction term was added
+separately together with all main predictors. For each model, AIC values
+were compared with those from the stepwise model and the significance of
+the interaction term was evaluated. Across these models, most
+interaction terms did not improve model performance and were not
+statistically significant.
+
+Only the BMI $\times$ cholesterol interaction improved the model by
+lowering the AIC and showing statistical significance.This model
+achieved the lowest AIC ($1588.306$) and the lowest BIC ($1642.771$).
+This indicates that, while most predictors act independently in this
+dataset, the BMI $\times$ cholesterol interaction slightly modifies the
+effect of one predictor on CHD. The above can be verified from the
+following table.
+
+```{r, echo=FALSE}
+model_list <- list(
+  "1. Stepwise Model (Base)" = step_model,
+  "2. Age x Cholesterol" = interaction_model_age0_cholmmol,
+  "3. Age x SBP" = interaction_model_age0_sbp,
+  "4. Smoker x Cholesterol" = interaction_model_smoker_cholmmol,
+  "5. Smoker x SBP" = interaction_model_smookerf_sbp10,
+  "6. BMI x Cholesterol" = interaction_model_bmi_cholmmol
+)
+# Extract AIC and BIC values for all models
+aic_values <- sapply(model_list, AIC)
+bic_values <- sapply(model_list, BIC)
+
+# Combine the results into a data frame
+comparison_table <- data.frame(
+  AIC = aic_values,
+  BIC = bic_values
+)
+
+# Optional: Use a package like 'knitr' or 'flextable' to render a clean output
+print(comparison_table)
+```
+
+Furthermore, a likelihood ratio test was conducted to compare the
+stepwise-selected main‐effects model with the model that included the
+BMI $\times$ cholesterol interaction term.
+
+```{r lrt-test, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+anova(step_model, interaction_model_bmi_cholmmol, test = "LRT")
+```
+
+```{r, echo=FALSE}
+library(knitr)
+
+lrt_table <- data.frame(
+  Model = c("Stepwise Model (no interaction)", "Interaction Model (with bmi:cholmmol)"),
+  Residual_Df = c(3131, 3130),
+  Residual_Deviance = c(1578.2, 1570.3),
+  Df = c("", 1),
+  Deviance = c("", 7.9208),
+  P_value = c("", "0.004887")
+)
+
+kable(lrt_table, 
+      caption = "Likelihood Ratio Test Comparing Models With and Without the BMI × Cholesterol Interaction",
+      align = "c")
+
+```
+
+The p-value in the table represents the deviance difference. A high
+p-value means smaller chi-square statistic and hence smaller deviance
+difference $\Delta D$. In our case, the p-value $= 0.0049<0.01$
+indicates that this reduction is statistically significant. This result
+suggests that the effect of cholesterol on CHD risk depends on BMI, and
+that including the bmi × cholmmol interaction provides additional
+information and significantly improves the model fit.
+
+After the aforementioned tests, the final model that is chosen is:
+
+$$\text{CHD} \sim \text{Age} + \text{Cholesterol} + \text{Systolic BP} + \text{BMI} + \text{Smoking Status} + \text{Corneal Arcus} + \text{Behavior Type} + \text{Cholesterol} : \text{BMI}$$
+and is mathematically expressed as:
+
+$$
+\begin{aligned}
+\text{logit}\big(P(\text{CHD}_i = 1)\big)
+&= \beta_0 
++ \beta_1 \cdot \text{age0}_i
++ \beta_2 \cdot \text{cholmmol}_i
++ \beta_3 \cdot \text{sbp10}_i \\
+&\quad
++ \beta_4 \cdot \text{bmi}_i
++ \beta_5 \cdot \text{smoker}_i
++ \beta_6 \cdot \text{arcus0}_i \\
+&\quad
++ \beta_7 \cdot \text{dibpat0fA}_i
++ \beta_8 \cdot (\text{cholmmol}_i \cdot \text{bmi}_i).
+\end{aligned}
+$$
+
+```{r, echo=FALSE}
+coef_table_interaction <- data.frame(
+  Variable = c("(Intercept)", "age0", "cholmmol", "sbp10", "bmi",
+               "smokerfYes", "arcus0", "dibpat0fA", "cholmmol:bmi"),
+  Estimate = c(-21.28332, 0.05645, 1.87548, 0.18684, 0.41952,
+               0.59778, 0.21903, 0.72663, -0.05908),
+  Std_Error = c(3.30528, 0.01228, 0.51871, 0.04159, 0.12774,
+                0.14197, 0.14380, 0.14564, 0.02063),
+  Z_value = c(-6.439, 4.595, 3.616, 4.492, 3.284,
+              4.211, 1.523, 4.989, -2.864),
+  P_value = c("1.20e-10", "4.32e-06", "0.00030", "7.05e-06", "0.00102",
+              "2.55e-05", "0.12771", "6.07e-07", "0.00418")
+)
+
+kable(coef_table_interaction, digits = 4,
+      caption = " Logistic Regression Coefficients for the Model Including the BMI × Cholesterol Interaction")
+```
+
+From Table 5, where the numerical estimates, errors, and significance
+tests for each $\beta$ are presented, we can also verify that the
+interaction term (cholmmol:bmi) is statistically significant.
+
+#### 3c.
+
+**Task:** Calculate the predicted risk of the outcome for every person
+in the dataset according to the model you have chosen and add it to your
+dataset.
+
+**Answer:**
+
+We calculated the predicted risk of CHD for each individual in the
+dataset using the chosen interaction model ($bmi \times cholmmol$) and
+stored these values in a new column called predicted_risk. The table
+below shows the top rows of the final dataset:
+
+```{r}
+dc$predicted_risk <- predict(interaction_model_bmi_cholmmol, newdata = dc, type = "response")
+kable(head(dc), digits=3)
+```
+
+### Task 4 - Discrimination
+
+#### 4a.
+
+**Task:** To discriminate between the cases and non-cases please plot
+the ROC curve and calculate the derived AUC including 95% confidence
+intervals.
+
+**Answer:**
+
+According to Dr. Thorgerdur Palsdottir presentation notes, the ROC Curve
+(Receiver operating curve) and and the AUC (Area Under the Curve)
+evaluate how well the predicted risk from our model distinguishes
+between patients with and without the disease.
+
+```{r}
+library(pROC)
+#ROC curve object using pROC package
+roc_curve <- roc(dc$chd69, dc$predicted_risk)
+
+#Plotting ROC Curve
+plot(roc_curve, col = "blue", main = "ROC Curve", print.auc = TRUE)
+
+#AUC
+auc_app <- auc(roc_curve)
+
+# 95% CI for AUC
+auc_ci <- ci.auc(roc_curve)
+
+```
+
+The derived AUC (area under the curve) is $0.753$ which indicates good
+discrimination. The $95\%$ Confidence Interval for AUC is
+$(0.7237,0.7824)$. The ROC curve plots sensitivity (true positive rate)
+vs 1-specificity (false positive rate) across all possible
+thresholds. The diagonal gray line represents random selection (AUC =
+0.5). Our curve is above this line and has a significant predictive
+value.
+
+#### 4b.
+
+**Task:** Find the threshold that maximizes the sum of the sensitivity
+and specificity. Please report the sensitivity and specificity at that
+threshold.
+
+**Answer:** In general, we define sensitivity and specificity as:
+$$\text{Sensitivity} = \frac{\text{True Positives}}{\text{True Positives} + \text{False Negatives}}$$
+
+$$\text{Specificity} = \frac{\text{True Negatives}}{\text{True Negatives} + \text{False Positives}}$$
+
+Our code provides the following results:
+
+```{r, echo=FALSE}
+#Make a data frame with the sensitivities, specificity, and thresholds
+roc_df <- data.frame(roc_curve$sensitivities,roc_curve$specificities, roc_curve$thresholds)
+
+#Make a column for the sum of the sensitivities and specificity
+roc_df$sum <- (roc_df$roc_curve.sensitivities + roc_df$roc_curve.specificities)
+
+#Find the threshold, sens, and spec when sum is max
+roc_df[roc_df$sum == max(roc_df$sum), 1:3]
+
+```
+
+The threshold that maximizes the sum of the sensitivity and specificity
+is 0.09042859, where sensitivity = 0.6811024 and specificity =
+0.7178510. Practically this means that, at this threshold, the model
+correctly identifies 68.11% of the men who actually have CHD
+(Sensitivity) and correctly identifies 71.79% of the men who do not have
+CHD (Specificity).
+
+At the optimal threshold of 9.04%, we have a good balance between the
+two metrics which are both around 70%.
+
+#### 4c.
+
+**Task:** AUC adjusted for optimism. To adjust for optimism in the
+predictions, we can use the bootstrapping method using 200 repetitions.
+Please calculate the adjusted AUC with 95% confidence intervals and
+compare it to the unadjusted AUC. Is there a difference in the
+unadjusted and the adjusted AUC?
+
+Note: please do not use pre-programmed functions in R to answer this
+question.
+
+**Answer:**
+
+To adjust AUC for optimism, we used a bootstrap method with 200
+repetitions, without pre-programmed functions in R. In our code, we
+started with bootstrap sampling, i.e. for each iteration we took a
+sample with replacement from the original dataset (boot_data). Then, we
+refit the model on each bootstrap sample and calculate the AUC on the
+bootstrap sample itself (boot_auc). We then applied the same fitted
+model to the original dataset and calculated the AUC there (test_auc).
+
+The difference between these two AUCs (boot_auc – test_auc) is the
+optimism for that bootstrap sample and the adjusted AUC is the
+difference between the apparent AUC (auc_app) and the mean optimism
+(optimism_mean).
+
+```{r}
+#Set the seed for reproducability 
+set.seed("206")
+
+optimism <- numeric(200)
+for (i in 1:200){
+  #Sample with replacement -> bootstrap sample boot_data
+  boot_index <- sample(1:nrow(dc), replace = TRUE)
+  boot_data <- dc[boot_index, ]
+  
+  #Fit model on boot_data
+  boot_model <- glm( chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf +
+                       arcus0 + dibpat0f + bmi:cholmmol,
+                     data = boot_data,
+                     family = binomial)
+  
+  
+  #Find AUC for boot_data
+  boot_data$boot_pred <- predict(boot_model, 
+                                 newdata = boot_data, 
+                                 type = "response")
+  boot_roc <- roc(boot_data$chd69,boot_data$boot_pred)
+  boot_auc <- auc(boot_roc)
+  
+  #AUC_test(b) on original data
+  test_pred <- predict(boot_model, 
+                       newdata = dc, 
+                       type = "response")
+  test_roc <- roc(dc$chd69,test_pred)
+  test_auc <- auc(test_roc)
+  
+  #Optimism(b) = AUC_boot(b) - AUC_test(b)
+  optimism[i] <- boot_auc - test_auc
+}
+
+#Optimism_mean = average optimism(b)
+optimism_mean <- mean(optimism)
+
+#AUC_corrected = AUC_app – optimism_mean
+auc_corrected <- auc_app - optimism_mean
+
+#c(auc_app, auc_corrected)
+```
+
+```{r,echo=FALSE}
+#auc_corrected_values <- auc_app - optimism
+
+#c(quantile(auc_corrected_values, 0.025), quantile(auc_corrected_values, 0.975))
+```
+
+Our code provides the following results:
+
+| Metric         | AUC       | 95% CI           |
+|----------------|-----------|------------------|
+| Unadjusted AUC | 0.7530452 | (0.7237, 0.7824) |
+| Adjusted AUC   | 0.7461568 | (0.7168, 0.7747) |
+
+As we can see here, the adjusted AUC is slightly less than the
+unadjusted AUC. This makes sense since we are subtracting the optimism
+in order to get the adjusted value. The confidence interval for the
+adjusted is shifted down as well.
+
+The difference is relatively small and the overlapping confidence
+intervals do not imply a significant loss in model performance.
+
+#### 4d.
+
+**Task:** Cross validation. Use 10-fold cross-validation for a logistic
+model to obtain the adjusted AUC and compare to the unadjusted and
+adjusted AUC
+
+**Answer:**
+
+According to Dr. Thorgerdur Palsdottir, K-fold Cross-Validation (CV) is
+an internal validation technique used to estimate the model's expected
+prediction error. The 10-fold CV process starts with splitting the
+dataset ($\text{dc}$) into $K=10$ folds. For each fold $K$, the model
+was trained on the remaining $K-1$ folds. The trained model was used to
+predict probabilities on the held-out $K$-th fold. We then pooled all
+held-out predictions and computed the Cross-Validation Adjusted AUC
+($\text{CV AUC}$) for all of them.
+
+```{r}
+folds <- sample(rep(1:10, length.out = nrow(dc)))
+
+cv_pred <- rep(NA, nrow(dc))
+
+for (i in 1:10) {
+  
+  train <- which(folds != i)
+  test <- which(folds == i)
+  
+  # Train on K-1 folds
+  cv_model <- glm(chd69 ~ age0 + cholmmol + sbp10 + bmi + smokerf + arcus0 + dibpat0f 
+                  + bmi:cholmmol,
+               data = dc[train, ], 
+               family = binomial)
+  
+  cv_pred[test] <- predict(cv_model,
+                            newdata = dc[test, ], 
+                            type = "response")
+}
+
+cv_roc <- roc(dc$chd69, cv_pred)
+cv_auc <- auc(cv_roc)
+```
+
+In the following table, we compare the unadjusted AUC to the two
+internal validation methods:
+
+| Metric                          | Value  | Difference from Unadjusted AUC |
+|---------------------------------|--------|--------------------------------|
+| Unadjusted AUC                  | 0.7530 | –                              |
+| Bootstrap Optimism Adjusted AUC | 0.7462 | -0.0068                        |
+| Cross-Validation Adjusted AUC   | 0.7415 | -0.0115                        |
+
+The Cross Validation adjusted AUC is less than the unadjusted AUC and is
+slightly less and the Bootstrap Optimism Adjusted AUC.
+
+Both adjusted AUCs are lower than the unadjusted AUC which means there
+was indeed optimism in our initial predictions. However, the differences
+are relatively small which means that we can consider the model stable
+and not overfitted to the training data.
+
+### Task 5 - Calibration
+
+#### 5a.
+
+**Task:** Calibration Curve. To evaluate the performance of the
+prediction model we have computed the AUC from ROC analysis, now please
+plot the calibration curve and report the slope and the intercept of the
+calibration curve. Use the model you chose before.
+
+**Answer:**
+
+According to Dr. Thorgerdur Palsdottir presentation notes, Calibration
+of a Prediction Model evaluates agreement between predicted risk and
+observed values in our data. We have three main tools for evaluation of
+calibration: the Calibration Plot, the Calibration-in-the-large and the
+Hosmer-Lemeshow test for goodness-of-fit
+
+The calibration model is fitted by regressing the outcome (chd69) on the
+linear predictor (log-odds) from our main prediction model.
+$$\text{logit}(P(\text{CHD}_i=1)) = \text{Intercept} + \text{Slope} \cdot \text{logit}(\hat{P}_i)$$
+
+```{r,echo=FALSE}
+
+# Fit a logistic regression model, the calibration model
+# Calculate the predicted log-odds (the linear predictor)
+dc$predicted_logit <- predict(interaction_model_bmi_cholmmol, newdata = dc, type = "link" )
+
+library(rms) # Requires the rms package for the lrm function
+
+# The calibration model should be fit on the linear predictor (predicted_logit)
+# without an offset if you are calculating the intercept and slope directly:
+calibration_model <- lrm(chd69 ~ predicted_logit, data = dc)
+
+# Intercept and Slope
+calibration_intercept <- coef(calibration_model)[1] # Intercept 
+calibration_slope <- coef(calibration_model)[2]     #Slope
+
+#print(paste("Calibration Intercept:", calibration_intercept))
+#print(paste("Calibration Slope:", calibration_slope))
+
+# Plot the Calibration Curve (using the CalibrationCurves package)
+
+library(CalibrationCurves)
+
+# Note: The glm object (interaction_model_bmi_cholmmol) or the predicted probabilities
+# and outcomes are used here. We'll use the predicted probabilities:
+
+CalibrationCurve <- valProbggplot(dc$predicted_risk,dc$chd69,group = 10)
+
+#plot CalibrationCurve  
+
+curve_data <- CalibrationCurve$cal.curves$Overall
+df <- data.frame(
+  x = curve_data$x,
+  y = curve_data$y
+)
+
+# Plot only the calibration curve
+ggplot(df, aes(x = x, y = y)) +
+  geom_line(color = "blue", size = 1) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(
+    x = "Predicted Probability",
+    y = "Observed Probability",
+    title = "Calibration Curve"
+  ) +
+  theme_minimal()
+```
+
+The calibration model gives an Intercept value of $2.00 \times 10^{-13}$
+which is very close to 0 and means that there is no systematic bias
+(predictions are not systematically too high or too low). The Slope
+value which is approximately $1.00$ also indicates an excellent fit.
+
+The calibration curve shows how well the predicted risks from our model
+align with the observed risks of CHD in our cohort and compares
+predicted probabilities of CHD against observed outcomes, grouped into
+deciles. The diagonal line represents the perfect calibration. In the
+range between $0.0 - 0.20$ for the Predicted Probability, the black
+curve is very close to the ideal red one which indicates a good
+calibration for individuals predicted to have a low risk of CHD.
+However, as the predicted probability increases, our model's curve falls
+below the red line which is a sign of over-prediction, i.e. our model
+predicts risks that are higher than what is actually observed in the
+cohort. Our curve ends at a Predicted Probability of approximately 0.60.
+This means that our model is not predicting a risk higher than $60\%$
+because no one in our dataset was predicted to have a risk that high.
+
+#### 5b.
+
+**Task:** Please estimate the goodness of fit by the method of Hosmer
+and Lemeshow. Interpret the test results
+
+**Answer:** According to Dr. Thorgerdur Palsdottir presentation notes,
+the Hosmer–Lemeshow (HL) works by grouping individuals by predicted
+risk, typically into 10 deciles and comparing the observed to the
+expected events within each group.
+
+```{r}
+library(ResourceSelection)
+
+# Hosmer-Lemeshow test on the final logistic regression model default: G=10 groups/deciles 
+hosmer_lemeshow_result<-hoslem.test(dc$chd69, fitted(interaction_model_bmi_cholmmol), g=10)
+
+# Print the result
+print(hosmer_lemeshow_result)
+```
+
+In our case, the Hosmer-Lemeshow test provides a p-value equal to
+$0.2574$ greater than the significance level 0.05. So, we fail to reject
+the null hypothesis ($H_0$) and we can conclude that there is no
+statistically significant difference between the observed event rates
+and the predicted event rates across the 10 risk groups. Hence, our
+logistic regression model has sufficient goodness of fit to the data.
+This finding is consistent with the intercept and slope values in Task
+5a.
+
+#### 5c.
+
+**Task:** Create a prediction model only using variable agegroup as a
+predictor and estimate the discrimination
+
+**Answer:**
+
+The prediction model using only agegroup has the following form:
+$$\text{logit}(P(\text{CHD}_i=1)) = \beta_0 + \beta_1 \cdot \text{agegroup}_{[45,55)} + \beta_2 \cdot \text{agegroup}_{[55,60]}$$
+The lowest age group, [39, 45) is the reference level.
+
+```{r}
+# prediction model using only agegroup
+# data=dc complete case data 
+model_agegroup <- glm(chd69 ~ agegroup,data = dc,family = binomial)
+
+# predicted probabilities
+dc$predicted_risk_agegroup <- predict(model_agegroup,newdata = dc,type = "response")
+
+library(pROC)
+
+# ROC object
+roc_agegroup <- roc(dc$chd69,dc$predicted_risk_agegroup, ci = TRUE )
+
+auc_agegroup <- roc_agegroup$auc # AUC value
+
+# Print the AUC value and the 95% CI
+print(paste("AUC for agegroup model:", auc_agegroup))
+print(ci(roc_agegroup))
+```
+
+The discrimination of this model measured by the AUC is $0.6091$ which
+indicates that the model has poor discrimination, if we consider that a
+random guess has AUC = $0.50$. The respective 95% confidence interval is
+$(0.5765,0.6416)$
+
+#### 5d.
+
+**Task:** Please compare the discrimination to the model you used before
+with a statistical test and interpret the results.
+
+**Answer:** We want to compare our final model which is:
+
+$$\text{CHD} \sim \text{Age} + \text{Cholesterol} + \text{Systolic BP} + \text{BMI} + \text{Smoking Status} + \text{Corneal Arcus} + \text{Behavior Type} + \text{Cholesterol} : \text{BMI}$$
+and we want to compare it to the simple age-only model which is
+
+$$\text{CHD} \sim \text{AgeGroup}$$
+
+We use the DeLong test for two correlated ROC curves:
+
+```{r}
+# DeLong test to compare the two AUCs
+# order is important Compare the final model to the simpler model
+delong_test_result <- roc.test(
+  roc_curve,           # Model 1 - Our final Model
+  roc_agegroup,        # Model 2 - Age-only Model
+  method = "delong"
+)
+
+print(delong_test_result)
+```
+
+Our final model has a higher AUC of $0.7530$ than the Age-Only Model's
+AUC which is $0.6091$. Their difference ($0.1439$) indicates a much
+stronger predictive ability for our final model. Generally, the higher
+AUC, the better prediction the model has. Since the P-value is
+($< 2.2 \times 10^{-16} < 0.05$), we definitely reject the null hypothesis that
+the two AUCs are equal. This indicates a statistically significant difference
+between the two AUCs. So, the additional traditional cardiovascular
+risk factors (cholesterol, SBP, BMI, smoking, arcus, and behaviour type)
+leads to a statistically better model compared to a model based only on
+the age group. We note that the AUCs are comparable since the
+predictions are made on same cohort.
+
+
+
+```{r}
+# --- Alternative/Supplementary Comparisons ---
+
+pred_final <- predict(interaction_model_bmi_cholmmol , newdata = dc, type = "response")
+pred_age   <- predict(model_agegroup,   newdata = dc, type = "response")
+
+library(pROC)
+roc_final <- roc_curve
+roc_age   <- roc_agegroup
+
+# A. Likelihood Ratio Test
+lrt_result <- anova(model_agegroup, interaction_model_bmi_cholmmol, test = "LRT")
+
+# B. Confidence Interval Comparison
+ci_final <- ci.auc(roc_final)
+ci_age   <- ci.auc(roc_age)
+
+print(lrt_result)
+
+```
+Additionally, the Likelihood Ratio Test (LRT) confirmed that the final
+model provides a significantly better fit to the data than the age-only
+model (p \< 0.001), and the 95% confidence intervals of the AUCs do not
+overlap, as it can be verified from the following results:
+
+
+| Model           | AUC 95% Confidence Interval |
+|-----------------|-----------------------------|
+| Final Model     | 0.7237 – 0.7824             |
+| Age-Only Model  | 0.5765 – 0.6416             |
+
+#### 5e.
+
+**Task:** Plot both ROC curves in one figure.
+
+**Answer:**
+
+```{r,echo=FALSE}
+library(pROC)
+
+# Plot Final Model
+# The final model has the higher AUC, so we use it to initialize the plot.
+plot(roc_curve,col = "blue",             
+  main = "ROC Curve Comparison: Final Model vs. Age-Only Model",
+  print.auc = TRUE,            # Print AUC on the plot
+  print.auc.y = 0.4,           # Position the AUC text slightly below the Age-Only AUC
+  legacy.axes = TRUE,percent = TRUE
+)
+
+# Plot Age-Only Model
+# Use 'lines' instead of 'plot' to add to the existing figure.
+lines(roc_agegroup,
+  col = "green",             # Red color for the Age-Only Model
+  print.auc = TRUE,            # Print AUC on the plot
+  print.auc.y = 0.35,          # Position the AUC text slightly below the Full Model AUC
+  print.auc.x = 60,legacy.axes = TRUE,percent = TRUE
+)
+
+
+legend("bottomright",              
+  legend = c("Final Model (AUC = 0.7530)","Age-Only Model (AUC = 0.6091)"),
+  col = c("blue", "green"), # Corresponding colors
+  lwd = 2                      # Line thickness
+)
+
+```
+
+From the combined plot, we see a large gap between the blue curve and
+the green curve which confirms that the additional traditional
+cardiovascular risk factors significantly ameliorate the model fit and
+our final selected model is obviously better than the simpler model.
+
+### Task 6 - Decision Curve Analysis
+
+#### 6a.
+
+**Task:** Plot the decision curve for the model you created and compare
+its net benefit to the default strategies provided in the function.
+
+**Answer:**
+
+According to Dr. Thorgerdur Palsdottir, in order to evaluate the clinical usefulness of a prediction model, we calculate the Net Benefit (NB):
+$$NB = \frac{True Positives}{n} - \frac{False Positives}{n} \cdot \frac{p_t}{1 - p_t}$$
+
+where \(n\) is the total number of patients and \(p_t\) the threshold probability.  
+ 
+
+We compute Net Benefit over a range of threshold probabilities \(p_t\).  
+
+```{r}
+library(dcurves)
+
+dca_result <- dca(chd69 ~ predicted_risk,
+                  data = dc,
+                  thresholds = seq(0, 0.50, by = 0.01),
+                  label = list(predicted_risk = "Final Interaction Model"))
+
+plot(dca_result, smooth = TRUE) +
+  ggplot2::labs(title = "Decision Curve Analysis: Final Model")
+```
+
+#### 6b.
+
+**Task:** Is the model you have built clinically useful or clinically
+harmful? At what clinical thresholds is it beneficial?
+
+**Answer:** At what clinical thresholds is it beneficial? The decision
+curve shows that the Final Interaction Model (Blue line) provides a
+higher Net Benefit compared to the default strategies of "Treat All"
+(Red) and "Treat None" (Green) across the threshold probability range of
+approximately 8% to 24%.
+
+At low thresholds (\< 8%): The "Treat All" strategy performs similarly
+to the model, which is expected given the disease prevalence of 8%.
+
+At clinically relevant thresholds (e.g., 10% - 20%): The model shows a
+clear positive Net Benefit, indicating its utility for screening
+decisions in this range.
+
+At high thresholds (\> 25%): The Net Benefit drops slightly below zero.
+This corresponds with our findings in the Calibration Plot (Task 5a),
+where the model showed signs of over-prediction at higher probabilities.
+Therefore, the model should be used with caution if the decision
+threshold is set very high (above 25%), but it is robust for standard
+risk thresholds.
+
+#### 6c.
+
+**Task:** Differences in NB between models. Plot the model you created
+in 5.c and add it to the figure you have plotted of the net benefit in
+6.a. Make comparisons between the two curves.
+
+**Answer:** Here we compare the Net Benefit of our Final Model (with
+interactions) against the simpler Age-Only Model (from Task 5c).
+
+```{r}
+
+dca_comparison <- dca(chd69 ~ predicted_risk + predicted_risk_agegroup,
+                      data = dc,
+                      thresholds = seq(0, 0.50, by = 0.01),
+                      label = list(predicted_risk = "Final Interaction Model",
+                                   predicted_risk_agegroup = "Age-Only Model"))
+
+
+plot(dca_comparison, smooth = TRUE) +
+  ggplot2::labs(title = "DCA Comparison: Final Model vs. Age-Only Model")
+```
+
+Comparison with Age-Only Model: As shown in the comparison plot (Figure
+2), the Final Interaction Model (Turquoise line) consistently
+demonstrates a higher Net Benefit than the Age-Only Model (Purple line).
+
+While the Age-Only model's benefit drops to zero (becoming equivalent to
+"Treat None") at thresholds as low as 15%, the Final Model maintains a
+positive Net Benefit up to approximately 24%. This visualization
+confirms that incorporating traditional risk factors (Cholesterol, BMI,
+Smoking, etc.) significantly enhances the clinical utility of the
+prediction model compared to relying on age alone.
+
+### Task 7 - Discussion
+
+#### 7a.
+
+**Task:** Please discuss the clinical relevance of your model.
+
+**Answer:** Our final prediction model demonstrates moderate to good
+clinical relevance based on the statistical metrics and decision curve
+analysis performed.
+
+1.  Discrimination: With an AUC of 0.753, the model has an acceptable
+    ability to distinguish between individuals who will develop CHD and
+    those who will not. This is better than the age-only model (AUC
+    0.61), confirming that including physiological and behavioral risk
+    factors is essential for accurate risk stratification.
+2.  Decision Curve Analysis (DCA): The DCA is the strongest indicator of
+    clinical utility. It shows that our model provides a positive Net
+    Benefit compared to the default strategies ("Treat All" or "Treat
+    None") across a probability threshold range of approximately 8% to
+    24%. This range is highly relevant because clinical intervention
+    thresholds for cardiovascular prevention (e.g., initiating statin
+    therapy or lifestyle interventions) often fall within this 10-20%
+    risk range.
+3.  Actionability: The predictors included (Smoking, BMI, Cholesterol,
+    SBP) are largely modifiable. This increases the clinical relevance,
+    as the model not only predicts risk but highlights areas where
+    intervention (e.g., smoking cessation, lowering blood pressure)
+    could reduce that risk.
+
+However, a limitation observed in the calibration plot is the tendency
+to over-predict risk at higher probabilities (\>30%). This means the
+model might classify some high-risk patients as having a higher
+probability of CHD than they actually do, potentially leading to
+over-treatment in that specific subgroup.
+
+#### 7b.
+
+**Task:** What is needed for your model to be clinically relevant and
+useful in a clinical environment?
+
+**Answer:** For this model to be deployed effectively in a real-world
+clinical setting, several requirements must be met:
+
+1.  External Validation: We have only performed internal validation
+    (Bootstrap and Cross-Validation). Before clinical use, the model
+    must be validated on an external, contemporary dataset. Our data is
+    from 1960-1961 (WCGS); modern populations may have different
+    baseline risks due to changes in diet, medication (e.g., widespread
+    use of statins), and lifestyle.
+2.  Generalizability Check: The current dataset consists exclusively of
+    middle-aged employed men. To be useful in a general clinical
+    environment, the model needs to be tested and potentially updated to
+    include women and a broader age range.
+3.  Integration into Workflow: To be useful, the model should be
+    integrated into Electronic Health Records (EHR) as an automated
+    calculator. Clinicians are unlikely to manually calculate the
+    log-odds using the formula.
+4.  Clear Intervention Protocols: A risk score is only useful if it is
+    paired with a decision guide. We need to define exactly what happens
+    at different thresholds (e.g., "If Risk \> 10%, start lifestyle
+    counseling; if \> 20%, consider medication").
+
+#### 7c.
+
+**Task:** What are the next possible steps for you as a researcher to
+ascertain that your model is clinically relevant?
+
+**Answer:** To further ascertain the relevance and robustness of this
+model, the following steps should be taken:
+
+1.  Temporal Validation: Test the model on a more recent cohort (e.g.,
+    data from the 2000s or 2010s) to see if the regression coefficients
+    hold true for modern patients, or if the model needs recalibration
+    (updating the intercept and slope) to reflect current disease
+    prevalence.
+2.  Subgroup Analysis: Investigate the model's performance across
+    different ethnicities and socioeconomic groups, as the original WCGS
+    data may lack diversity.
+3.  Impact Analysis: Conduct a study to see if using this model actually
+    improves patient outcomes compared to current standard practice.
+    Does showing the risk score to the doctor and patient actually
+    result in behavior change or better prescribing patterns?
+4.  Updating Predictors: Consider investigating if adding modern
+    biomarkers (e.g., hs-CRP) or genetic risk scores could significantly
+    improve the AUC and Net Benefit beyond the current traditional risk
+    factors.
+
+# References
