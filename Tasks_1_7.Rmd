@@ -1,5 +1,5 @@
 ---
-title: "Biostatistics 1 - Assignment 1"
+title: "Biostatistics 1 - Assignment 2"
 author: "Group 3: William Fleury Dziuk, Galya Gadzhalova, Chen Ma, Afroditi-Iliana Zotou"
 date: "`r Sys.Date()`"
 output:
@@ -131,25 +131,6 @@ BMI, Smoking, Arcus (corneal arcus)
 These are the variables that have been previously known as risk factors
 for heart disease and are taken into consideration for our model.
 
-*The known factors that cause risk for the particular disease are
-separated into two groups (modifiable and non-modifiable)
-[@cdc_heart_disease_risk_factors].*
-
-*Modifiable risk factors are:*
-
--   *smoking*
--   *physical inactivity*
--   *unhealthy diet*
--   *high blood pressure*
--   *unhealthy blood cholesterol levels*
-
-*Non-modifiable risk factors are:*
-
--   *sex*
--   *ethnicity*
--   *age*
--   *family history (genetics)*
-
 **Task:** How many people are included?
 
 **Answer:** The dataset used for this analysis contains 3.139
@@ -197,6 +178,11 @@ corrplot(cor_matrix, method = "color",
 
 
 ```
+
+The heatmap illustrates the Pearson correlation coefficients between
+variable pairs. Darker blue indicates a stronger positive correlation.
+The strongest association is observed between BMI and Systolic Blood
+Pressure (sbp10)
 
 **Table 1: Correlation Matrix of Numeric Variables**
 
@@ -587,7 +573,7 @@ According to Dr. Thorgerdur Palsdottir presentation notes, the ROC Curve
 evaluate how well the predicted risk from our model distinguishes
 between patients with and without the disease.
 
-```{r}
+```{r, echo = F}
 library(pROC)
 #ROC curve object using pROC package
 roc_curve <- roc(dc$chd69, dc$predicted_risk)
@@ -606,10 +592,9 @@ auc_ci <- ci.auc(roc_curve)
 The derived AUC (area under the curve) is $0.753$ which indicates good
 discrimination. The $95\%$ Confidence Interval for AUC is
 $(0.7237,0.7824)$. The ROC curve plots sensitivity (true positive rate)
-vs 1-specificity (false positive rate) across all possible
-thresholds. The diagonal gray line represents random selection (AUC =
-0.5). Our curve is above this line and has a significant predictive
-value.
+vs 1-specificity (false positive rate) across all possible thresholds.
+The diagonal gray line represents random selection (AUC = 0.5). Our
+curve is above this line and has a significant predictive value.
 
 #### 4b.
 
@@ -632,18 +617,20 @@ roc_df <- data.frame(roc_curve$sensitivities,roc_curve$specificities, roc_curve$
 roc_df$sum <- (roc_df$roc_curve.sensitivities + roc_df$roc_curve.specificities)
 
 #Find the threshold, sens, and spec when sum is max
-roc_df[roc_df$sum == max(roc_df$sum), 1:3]
+#roc_df[roc_df$sum == max(roc_df$sum), 1:3]
 
 ```
 
+| Sensitivity | Specificity | Threshold  |
+|-------------|-------------|------------|
+| 0.6811024   | 0.717851    | 0.09042859 |
+
 The threshold that maximizes the sum of the sensitivity and specificity
-is 0.09042859, where sensitivity = 0.6811024 and specificity =
+is 0.09042859, where sensitivity is 0.6811024 and specificity equals
 0.7178510. Practically this means that, at this threshold, the model
 correctly identifies 68.11% of the men who actually have CHD
 (Sensitivity) and correctly identifies 71.79% of the men who do not have
-CHD (Specificity).
-
-At the optimal threshold of 9.04%, we have a good balance between the
+CHD (Specificity). At the optimal threshold of 9.04%, we have a good balance between the
 two metrics which are both around 70%.
 
 #### 4c.
@@ -696,24 +683,23 @@ for (i in 1:200){
   boot_roc <- roc(boot_data$chd69,boot_data$boot_pred)
   boot_auc <- auc(boot_roc)
   
-  #AUC_test(b) on original data
+  #test_auc on original data
   test_pred <- predict(boot_model, 
                        newdata = dc, 
                        type = "response")
   test_roc <- roc(dc$chd69,test_pred)
   test_auc <- auc(test_roc)
   
-  #Optimism(b) = AUC_boot(b) - AUC_test(b)
+  #optimism[i] <- boot_auc - test_auc
   optimism[i] <- boot_auc - test_auc
 }
 
-#Optimism_mean = average optimism(b)
+#Optimism_mean = average optimism
 optimism_mean <- mean(optimism)
 
 #AUC_corrected = AUC_app – optimism_mean
 auc_corrected <- auc_app - optimism_mean
 
-#c(auc_app, auc_corrected)
 ```
 
 ```{r,echo=FALSE}
@@ -894,7 +880,7 @@ the Hosmer–Lemeshow (HL) works by grouping individuals by predicted
 risk, typically into 10 deciles and comparing the observed to the
 expected events within each group.
 
-```{r}
+```{r,echo=FALSE}
 library(ResourceSelection)
 
 # Hosmer-Lemeshow test on the final logistic regression model default: G=10 groups/deciles 
@@ -924,7 +910,7 @@ The prediction model using only agegroup has the following form:
 $$\text{logit}(P(\text{CHD}_i=1)) = \beta_0 + \beta_1 \cdot \text{agegroup}_{[45,55)} + \beta_2 \cdot \text{agegroup}_{[55,60]}$$
 The lowest age group, [39, 45) is the reference level.
 
-```{r}
+```{r,echo=FALSE}
 # prediction model using only agegroup
 # data=dc complete case data 
 model_agegroup <- glm(chd69 ~ agegroup,data = dc,family = binomial)
@@ -957,13 +943,14 @@ with a statistical test and interpret the results.
 **Answer:** We want to compare our final model which is:
 
 $$\text{CHD} \sim \text{Age} + \text{Cholesterol} + \text{Systolic BP} + \text{BMI} + \text{Smoking Status} + \text{Corneal Arcus} + \text{Behavior Type} + \text{Cholesterol} : \text{BMI}$$
-and we want to compare it to the simple age-only model which is
+with the simple age-only model which is:
 
 $$\text{CHD} \sim \text{AgeGroup}$$
+To compare the discrimination of the two modles, we use the DeLong test which is a non‑parametric method for statistically comparing the areas under two or more correlated ROC curves that are derived from the same set of subjects. The statistic follows an asymptotic chi‑square distribution, allowing hypothesis testing and confidence‑interval construction for differences or contrasts among the AUCs (DeLong ER, DeLong DM, Clarke-Pearson DL. Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach. Biometrics. 1988).
 
-We use the DeLong test for two correlated ROC curves:
+Hence, we have the following:
 
-```{r}
+```{r,echo=FALSE}
 # DeLong test to compare the two AUCs
 # order is important Compare the final model to the simpler model
 delong_test_result <- roc.test(
@@ -979,17 +966,17 @@ Our final model has a higher AUC of $0.7530$ than the Age-Only Model's
 AUC which is $0.6091$. Their difference ($0.1439$) indicates a much
 stronger predictive ability for our final model. Generally, the higher
 AUC, the better prediction the model has. Since the P-value is
-($< 2.2 \times 10^{-16} < 0.05$), we definitely reject the null hypothesis that
-the two AUCs are equal. This indicates a statistically significant difference
-between the two AUCs. So, the additional traditional cardiovascular
-risk factors (cholesterol, SBP, BMI, smoking, arcus, and behaviour type)
-leads to a statistically better model compared to a model based only on
-the age group. We note that the AUCs are comparable since the
-predictions are made on same cohort.
+($< 2.2 \times 10^{-16} < 0.05$), we definitely reject the null
+hypothesis that the two AUCs are equal. This indicates a statistically
+significant difference between the two AUCs. So, the additional
+traditional cardiovascular risk factors (cholesterol, SBP, BMI, smoking,
+arcus, and behaviour type) leads to a statistically better model
+compared to a model based only on the age group. We note that the AUCs
+are comparable since the predictions are made on the same cohort.
 
+We also perfom a Likelihood Ratio Test (LRT):
 
-
-```{r}
+```{r,echo=FALSE}
 # --- Alternative/Supplementary Comparisons ---
 
 pred_final <- predict(interaction_model_bmi_cholmmol , newdata = dc, type = "response")
@@ -1009,16 +996,16 @@ ci_age   <- ci.auc(roc_age)
 print(lrt_result)
 
 ```
-Additionally, the Likelihood Ratio Test (LRT) confirmed that the final
+
+Again, the Likelihood Ratio Test (LRT) confirmed that the final
 model provides a significantly better fit to the data than the age-only
 model (p \< 0.001), and the 95% confidence intervals of the AUCs do not
 overlap, as it can be verified from the following results:
 
-
-| Model           | AUC 95% Confidence Interval |
-|-----------------|-----------------------------|
-| Final Model     | (0.7237, 0.7824)            |
-| Age-Only Model  | (0.5765, 0.6416)            |
+| Model          | AUC 95% Confidence Interval |
+|----------------|-----------------------------|
+| Final Model    | (0.7237, 0.7824)            |
+| Age-Only Model | (0.5765, 0.6416)            |
 
 #### 5e.
 
@@ -1070,15 +1057,17 @@ its net benefit to the default strategies provided in the function.
 
 **Answer:**
 
-According to Dr. Thorgerdur Palsdottir, in order to evaluate the clinical usefulness of a prediction model, we calculate the Net Benefit (NB):
+According to Dr. Thorgerdur Palsdottir, in order to evaluate the
+clinical usefulness of a prediction model, we calculate the Net Benefit
+(NB):
 $$NB = \frac{True Positives}{n} - \frac{False Positives}{n} \cdot \frac{p_t}{1 - p_t}$$
 
-where \(n\) is the total number of patients and \(p_t\) the threshold probability.  
- 
+where $n$ is the total number of patients and $p_t$ the threshold
+probability.
 
-We compute Net Benefit over a range of threshold probabilities \(p_t\).  
+We compute Net Benefit over a range of threshold probabilities $p_t$.
 
-```{r}
+```{r,echo=FALSE}
 library(dcurves)
 
 dca_result <- dca(chd69 ~ predicted_risk,
@@ -1095,8 +1084,7 @@ plot(dca_result, smooth = TRUE) +
 **Task:** Is the model you have built clinically useful or clinically
 harmful? At what clinical thresholds is it beneficial?
 
-**Answer:** At what clinical thresholds is it beneficial? The decision
-curve shows that the Final Interaction Model (Blue line) provides a
+**Answer:**  The decision curve shows that the Final Interaction Model (Blue line) provides a
 higher Net Benefit compared to the default strategies of "Treat All"
 (Red) and "Treat None" (Green) across the threshold probability range of
 approximately 8% to 24%.
@@ -1124,7 +1112,7 @@ in 5.c and add it to the figure you have plotted of the net benefit in
 **Answer:** Here we compare the Net Benefit of our Final Model (with
 interactions) against the simpler Age-Only Model (from Task 5c).
 
-```{r}
+```{r,echo=FALSE}
 
 dca_comparison <- dca(chd69 ~ predicted_risk + predicted_risk_agegroup,
                       data = dc,
@@ -1154,34 +1142,56 @@ prediction model compared to relying on age alone.
 
 **Task:** Please discuss the clinical relevance of your model.
 
-**Answer:** Our final prediction model demonstrates moderate to good
+**Answer:** According to Dr. Thorgerdur Palsdotti, in order to determine
+the quality of our prediction models and measure the performance we use
+three measures: Discrimination, Calibration and Clinical usefulness.
+
+Discrimination is the ability of the model to discriminate between
+individuals who will develop CHD and those who won't. From Task 4a., we
+conclude that the final logistic regression model (including the
+$\text{BMI} \times \text{Cholesterol}$ interaction) has a good
+discrimination value, with a Cross-Validation Adjusted AUC of $0.7415$,
+a value clearly better than chance (AUC = 0.50). In Task 4d., the small
+difference between the Unadjusted AUC ($0.7530$) and the CV-Adjusted AUC
+($0.7415$) suggests that the model has an acceptable ability to
+distinguish between individuals who will develop CHD and those who will
+not and it is generally stable and not overfitted. In Task 5d., the
+DeLong Test indicates that the full model is significantly better
+($p < 2.2 \times 10^{-16}$) to the simpler, Age-Only Model
+($\text{AUC} = 0.6091$), implying that all traditional cardiovascular
+risk factors improve the model's predictive power.
+
+Calibration is the ability of the model to predict accurately. In Tasks
+5a. and 5b., we see that the Intercept ($\alpha \approx 0$ and slope
+($\beta \approx 1$) values, and the Hosmer-Lemeshow test
+($\text{P-value} = 0.2574$) indicate excellent calibration-in-the-large,
+meaning our model gives accurate predictions. This is an indicator that
+the model will perform well when applied to a new similar patient
+population/sample. However, the Calibration Curve Plot underlines a
+model's weakness to overpredict risk for individuals with higher risk
+(Predicted Probability $> 0.20$). This could be potentially further
+investigated with external validation.
+
+Clinical usefulness measures Clinical Net Benefits of our model. A model
+is considered clinically useful if its use leads to better outcomes for
+the patients and better clinical decisions than not using the model at
+all. Our logistic regression model shows clinical usefulness across a
+probability threshold range of approximately 8% to 24%., where its Net
+Benefit is significantly greater than the strategies of 'Treat All' or
+'Treat None' (Taks 6). This means that the model's predictions could
+lead to better outcomes by correctly identifying high-risk individuals
+for intervention while minimizing unnecessary treatment for low-risk
+individuals."
+
+Additionally, the predictors included (Smoking, BMI, Cholesterol,SBP)
+are largely modifiable. This increases the clinical relevance, as the
+model not only predicts risk but highlights areas where intervention
+(e.g., smoking cessation, lowering blood pressure) could reduce that
+risk.
+
+Overall, our final prediction model demonstrates moderate to good
 clinical relevance based on the statistical metrics and decision curve
 analysis performed.
-
-1.  Discrimination: With an AUC of 0.753, the model has an acceptable
-    ability to distinguish between individuals who will develop CHD and
-    those who will not. This is better than the age-only model (AUC
-    0.61), confirming that including physiological and behavioral risk
-    factors is essential for accurate risk stratification.
-2.  Decision Curve Analysis (DCA): The DCA is the strongest indicator of
-    clinical utility. It shows that our model provides a positive Net
-    Benefit compared to the default strategies ("Treat All" or "Treat
-    None") across a probability threshold range of approximately 8% to
-    24%. This range is highly relevant because clinical intervention
-    thresholds for cardiovascular prevention (e.g., initiating statin
-    therapy or lifestyle interventions) often fall within this 10-20%
-    risk range.
-3.  Actionability: The predictors included (Smoking, BMI, Cholesterol,
-    SBP) are largely modifiable. This increases the clinical relevance,
-    as the model not only predicts risk but highlights areas where
-    intervention (e.g., smoking cessation, lowering blood pressure)
-    could reduce that risk.
-
-However, a limitation observed in the calibration plot is the tendency
-to over-predict risk at higher probabilities (\>30%). This means the
-model might classify some high-risk patients as having a higher
-probability of CHD than they actually do, potentially leading to
-over-treatment in that specific subgroup.
 
 #### 7b.
 
@@ -1227,12 +1237,12 @@ model, the following steps should be taken:
     different ethnicities and socioeconomic groups, as the original WCGS
     data may lack diversity.
 3.  Impact Analysis: Conduct a study to see if using this model actually
-    improves patient outcomes compared to current standard practice.
-    Does showing the risk score to the doctor and patient actually
-    result in behavior change or better prescribing patterns?
+    improves patient outcomes compared to current standard practice. By
+    designing a Randomized Controlled Trial (RCT), we could mainly focus
+    on demonstrating improved patient outcomes. Does showing the risk
+    score to the doctor and patient actually result in behavior change
+    or better prescribing patterns?
 4.  Updating Predictors: Consider investigating if adding modern
     biomarkers (e.g., hs-CRP) or genetic risk scores could significantly
     improve the AUC and Net Benefit beyond the current traditional risk
     factors.
-
-# References
